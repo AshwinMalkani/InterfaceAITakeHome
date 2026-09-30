@@ -1,0 +1,11 @@
+# App profile: facts about the vendor product that are shared by every capability and tenant.
+# (M2 adds known states here: session-expired page, error banner, maintenance notice, ...)
+product: cu_core
+
+# Every cu_core capability runs in a signed-on session. Credentials are read from these
+# environment variables at run time; they are never written to artifacts, logs, or evidence.
+sign_on:
+  capability: cu_core.session.sign_on
+  credentials:
+    username: CU_CORE_USERNAME
+    password: CU_CORE_PASSWORD
