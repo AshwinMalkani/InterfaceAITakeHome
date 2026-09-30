@@ -1,0 +1,16 @@
+{% extends "page.html" %}
+{% block body %}
+<table width="100%" height="80%"><tr><td align="center" valign="middle">
+<table cellpadding="4" style="border:1px solid #888; background:#fff">
+  <tr><td colspan="2" class="hdr">{{ t.brand }} &mdash; Sign On</td></tr>
+  {% if expired %}<tr><td colspan="2" class="err">Your session has expired. Please sign on again.</td></tr>{% endif %}
+  {% if error %}<tr><td colspan="2" class="err">{{ error }}</td></tr>{% endif %}
+  <form method="post" action="/login" target="_top">
+  <tr><td class="lbl">User ID:</td><td><input type="text" name="userid" size="16"></td></tr>
+  <tr><td class="lbl">Password:</td><td><input type="password" name="password" size="16"></td></tr>
+  <tr><td></td><td><input type="submit" value="Sign On"></td></tr>
+  </form>
+  <tr><td colspan="2" style="color:#777">{{ t.product_version }}</td></tr>
+</table>
+</td></tr></table>
+{% endblock %}

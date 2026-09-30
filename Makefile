@@ -1,7 +1,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: setup lint typecheck test regress regress-update check
+.PHONY: setup lint typecheck test regress regress-update check app app-beta
 
 setup:
 	python3 -m venv $(VENV)
@@ -9,7 +9,7 @@ setup:
 	$(PY) -m pip install -q -e ".[dev]"
 
 lint:
-	$(PY) -m ruff check cua tests
+	$(PY) -m ruff check cua apps tests
 
 typecheck:
 	$(PY) -m mypy
@@ -28,3 +28,10 @@ regress-update:
 
 # Everything CI runs.
 check: lint typecheck test regress
+
+# Target app, one tenant per port. Sign on as teller1 / $$CU_CORE_PASSWORD (default: demo-only-password).
+app:
+	$(PY) -m apps.cu_core --tenant alpha --port 8001
+
+app-beta:
+	$(PY) -m apps.cu_core --tenant beta --port 8002

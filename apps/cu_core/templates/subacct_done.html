@@ -1,0 +1,10 @@
+{% extends "page.html" %}
+{% block body %}
+<div class="hdr">SUB-ACCOUNT OPENED</div>
+<table cellpadding="3">
+  <tr><td class="lbl">Confirmation Number:</td><td><b>{{ confirmation }}</b></td></tr>
+  <tr><td class="lbl">New Suffix:</td><td>{{ suffix }}</td></tr>
+  <tr><td class="lbl">Account Type:</td><td>{{ t.label(kind) }}</td></tr>
+  <tr><td class="lbl">Opening Deposit:</td><td>${{ "{:,.2f}".format(deposit) }}</td></tr>
+</table>
+{% endblock %}
