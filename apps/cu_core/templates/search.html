@@ -1,0 +1,12 @@
+{% extends "page.html" %}
+{% block body %}
+<div class="hdr">{{ t.label("member_inquiry") | upper }}</div>
+<form method="post" action="/core/member/search" name="frmSrch">
+<table cellpadding="3">
+  <tr><td class="lbl">{{ t.label("member_number") }}:</td><td><input type="text" name="f1" size="10" maxlength="10" value="{{ query }}"></td></tr>
+  <tr><td></td><td><input type="submit" value="{{ t.label('search_button') }}"></td></tr>
+</table>
+</form>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+{% if message %}<p class="msg">{{ message }}</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,10 @@
+{% extends "page.html" %}
+{% block body %}
+<table width="100%" cellpadding="3">
+  <tr><td class="hdr">Main Menu</td></tr>
+  <tr><td><a href="/core/member/search" target="main">{{ t.label("member_inquiry") }}</a></td></tr>
+  <tr><td><a href="#" onclick="return false" style="color:#999">Reports</a></td></tr>
+  <tr><td><a href="#" onclick="return false" style="color:#999">GL Posting</a></td></tr>
+  <tr><td><a href="/core/signoff" target="_top">Sign Off</a></td></tr>
+</table>
+{% endblock %}

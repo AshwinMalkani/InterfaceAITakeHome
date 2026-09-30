@@ -1,0 +1,21 @@
+{% extends "page.html" %}
+{% block body %}
+<div class="hdr">OPEN SUB-ACCOUNT &mdash; {{ m.member_id }}</div>
+{% if error %}<p class="err">{{ error }}</p>{% endif %}
+<form method="post" action="/core/member/subacct/review">
+<input type="hidden" name="mbr" value="{{ m.member_id }}">
+<table cellpadding="3">
+  <tr><td class="lbl">Account Type:</td><td><select name="f2">
+    <option value="">-- select --</option>
+    {% for k in kinds %}<option value="{{ k }}" {% if form.f2 == k %}selected{% endif %}>{{ t.label(k) }}</option>{% endfor %}
+  </select></td></tr>
+  <tr><td class="lbl">Nickname:</td><td><input type="text" name="f3" size="20" value="{{ form.f3 or '' }}"></td></tr>
+  <tr><td class="lbl">Opening Deposit:</td><td><input type="text" name="f4" size="12" value="{{ form.f4 or '' }}"></td></tr>
+  <tr><td class="lbl">Funding Account:</td><td><select name="f5">
+    <option value="">-- select --</option>
+    {% for a in m.accounts %}<option value="{{ a.suffix }}" {% if form.f5 == a.suffix %}selected{% endif %}>{{ a.suffix }} - {{ t.label(a.kind) }}</option>{% endfor %}
+  </select></td></tr>
+  <tr><td></td><td><input type="submit" value="Continue"></td></tr>
+</table>
+</form>
+{% endblock %}

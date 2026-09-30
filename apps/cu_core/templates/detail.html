@@ -1,0 +1,21 @@
+{% extends "page.html" %}
+{% block body %}
+<div class="hdr">MEMBER DETAIL</div>
+<table cellpadding="3">
+  <tr><td class="lbl">{{ t.label("member_number") }}:</td><td>{{ m.member_id }}</td>
+      <td class="lbl">Member Since:</td><td>{{ m.member_since }}</td></tr>
+  <tr><td class="lbl">Name:</td><td><b>{{ m.full_name }}</b></td>
+      <td class="lbl">Tax ID:</td><td>{{ m.tax_id }}</td></tr>
+  <tr><td class="lbl">Phone:</td><td>{{ m.phone }}</td><td></td><td></td></tr>
+</table>
+<br>
+<table class="grid" cellspacing="0">
+  <tr class="th"><td>Suffix</td><td>Description</td><td>Balance</td><td>Available</td></tr>
+  {% for a in m.accounts %}
+  <tr><td>{{ a.suffix }}</td><td>{{ t.label(a.kind) }}</td>
+      <td class="num">${{ "{:,.2f}".format(a.balance) }}</td><td class="num">${{ "{:,.2f}".format(a.available) }}</td></tr>
+  {% endfor %}
+</table>
+<br>
+<input type="button" value="Open Sub-Account" onclick="location.href='/core/member/subacct/new?mbr={{ m.member_id }}'">
+{% endblock %}

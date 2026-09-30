@@ -1,0 +1,17 @@
+{% extends "page.html" %}
+{% block body %}
+<div class="hdr">REVIEW NEW SUB-ACCOUNT</div>
+<table cellpadding="3">
+  <tr><td class="lbl">Member:</td><td>{{ m.member_id }}</td></tr>
+  <tr><td class="lbl">Account Type:</td><td>{{ t.label(form.f2) }}</td></tr>
+  <tr><td class="lbl">Nickname:</td><td>{{ form.f3 }}</td></tr>
+  <tr><td class="lbl">Opening Deposit:</td><td>${{ "{:,.2f}".format(deposit) }}</td></tr>
+  <tr><td class="lbl">Funding Account:</td><td>{{ form.f5 }}</td></tr>
+</table>
+<form method="post" action="/core/member/subacct/commit">
+  {% for k, v in form.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <input type="hidden" name="mbr" value="{{ m.member_id }}">
+  <input type="submit" value="Confirm" onclick="return confirm('Open this sub-account? This action cannot be undone.')">
+  <input type="button" value="Cancel" onclick="location.href='/core/member/detail?mbr={{ m.member_id }}'">
+</form>
+{% endblock %}
