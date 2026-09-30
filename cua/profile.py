@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import os
+from enum import StrEnum
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from cua.artifact.schema import IDENTIFIER
+from cua.artifact.schema import IDENTIFIER, Checkpoint, Target
 
 PROFILES_DIR = Path(__file__).resolve().parents[1] / "config" / "apps"
 
@@ -24,11 +25,37 @@ class SignOn(BaseModel):
     credentials: dict[str, str]  # sign-on capability input name -> environment variable
 
 
+class StateKind(StrEnum):
+    """How replay responds when a known app state appears. Written once per vendor product."""
+
+    INTERSTITIAL = "interstitial"        # recoverable: click its (safe) dismiss control, carry on
+    SESSION_EXPIRED = "session_expired"  # recoverable only if nothing irreversible ran: sign on, restart
+    APP_ERROR = "app_error"              # hard failure (retryable if nothing irreversible ran)
+    BUSINESS = "business"                # a business outcome shared by every capability (e.g. access denied)
+
+
+class KnownState(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(pattern=IDENTIFIER)
+    kind: StateKind
+    description: str
+    when: Checkpoint
+    dismiss: Target | None = None  # interstitials only: the acknowledge control (must be a safe click)
+
+    @model_validator(mode="after")
+    def _dismiss_only_for_interstitials(self) -> KnownState:
+        if (self.kind is StateKind.INTERSTITIAL) != (self.dismiss is not None):
+            raise ValueError(f"state {self.name!r}: `dismiss` is required for interstitials, and only them")
+        return self
+
+
 class AppProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     product: str = Field(pattern=IDENTIFIER)
     sign_on: SignOn | None = None
+    states: list[KnownState] = []
 
     def sign_on_params(self) -> dict[str, str]:
         """Read credentials from the environment. Error messages name the variable, never a value."""
