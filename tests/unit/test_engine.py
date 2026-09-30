@@ -447,3 +447,17 @@ class TestUnknownStates:
 
         surface.hooks["click"] = acknowledge
         assert isinstance(run(surface, states=[NOTICE]), Success)
+
+
+def test_state_appearing_as_the_post_condition_passes_is_attributed_to_that_step() -> None:
+    """The page changes between the scan and the check: the new page's overlay belongs to this step."""
+
+    class RacingPage(FakeSurface):
+        def check(self, checkpoint: Checkpoint) -> bool:
+            if isinstance(checkpoint, UrlMatches):  # s1's post-condition: the new page arrives now
+                self.overlay = "main"
+            return super().check(checkpoint)
+
+    result = run(RacingPage())
+    assert isinstance(result, Failure) and result.category is FailureCategory.UNKNOWN_STATE
+    assert result.step_id == "s1"

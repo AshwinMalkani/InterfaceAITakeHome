@@ -341,6 +341,9 @@ class ReplayEngine:
         while True:
             self._scan(step_id, state)
             if self.surface.check(checkpoint):
+                # Re-scan before accepting: the page may have changed between the scan above and the
+                # check, and states must be judged on a page at least as new as the one that passed.
+                self._scan(step_id, state)
                 return
             if time.monotonic() >= deadline:
                 raise StepFailure(FailureCategory.CHECKPOINT_FAILED, step_id,

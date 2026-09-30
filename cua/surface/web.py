@@ -244,10 +244,10 @@ class WebSurface:
     def check(self, checkpoint: Checkpoint) -> bool:
         match checkpoint:
             case TextPresent(text=text, frame=frame_name):
-                frame = self._frame(frame_name)
+                frame = self._parsed_frame(frame_name)
                 return frame is not None and self._count(frame.get_by_text(text).filter(visible=True)) > 0
             case UrlMatches(pattern=pattern, frame=frame_name):
-                frame = self._frame(frame_name)
+                frame = self._parsed_frame(frame_name)
                 return frame is not None and re.search(pattern, _path(frame.url)) is not None
             case ElementVisible(target=target):
                 return self._find_unique(target, [0] * len(target.strategies)) is not None
@@ -256,6 +256,17 @@ class WebSurface:
             case AnyOf(conditions=conditions):
                 return any(self.check(c) for c in conditions)
         raise AssertionError(f"unhandled checkpoint {checkpoint!r}")
+
+    def _parsed_frame(self, name: str | None) -> Frame | None:
+        """The frame, only once its document is fully parsed. A half-parsed page can show the
+        expected text while a modal further down the HTML doesn't exist yet."""
+        frame = self._frame(name)
+        if frame is None:
+            return None
+        try:
+            return frame if frame.evaluate("document.readyState") != "loading" else None
+        except PlaywrightError:  # navigating
+            return None
 
     def blocking_overlay(self) -> str | None:
         for frame in self.page.frames:
