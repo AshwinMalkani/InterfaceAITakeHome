@@ -139,7 +139,8 @@ class ConsoleFormatter(logging.Formatter):
     _COLORS = {"DEBUG": "\033[2m", "INFO": "\033[36m", "WARNING": "\033[33m", "ERROR": "\033[31m"}
     # Shown on every line in JSON; hidden on the console to keep it readable.
     _HIDDEN = frozenset(
-        {"ts", "level", "event", "logger", "run_id", "request_id", "mode", "capability_id", "tenant",
+        {"ts", "level", "event", "logger", "run_id", "request_id", "mode", "capability_id",
+         "capability_version", "tenant",
          "service", "env", "version", *_TRACE_KEYS}
     )
 
@@ -178,6 +179,22 @@ def get_logger(name: str) -> EventLogger:
     if not name.startswith(ROOT_LOGGER):
         name = f"{ROOT_LOGGER}.{name}"
     return EventLogger(logging.getLogger(name))
+
+
+@contextmanager
+def attach_handler(handler: logging.Handler) -> Iterator[None]:
+    """Temporarily add a JSON handler (e.g. a run's events.jsonl) without touching other handlers."""
+    root = logging.getLogger(ROOT_LOGGER)
+    if root.level == logging.NOTSET:
+        root.setLevel(logging.INFO)
+    handler.setFormatter(JsonFormatter())
+    handler.addFilter(_ContextFilter())
+    root.addHandler(handler)
+    try:
+        yield
+    finally:
+        root.removeHandler(handler)
+        handler.close()
 
 
 def configure_logging(

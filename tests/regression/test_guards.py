@@ -100,8 +100,8 @@ def test_no_sensitive_value_leaks_through_logs_or_evidence(
             log = get_logger("replay")
             log.info("step.started", value=seeded["member_id"], note=f"login {secret}")
             log.info("outputs.extracted", outputs=seeded)
-            run.write_json("result.json", {"outputs": seeded})
-            run.write_text("summary.txt", " ".join(seeded.values()))
+            run.save_json("result.json", {"outputs": seeded})
+            run.save_text("summary.txt", " ".join(seeded.values()))
             echo({"outputs": seeded}, reg)
     finally:
         configure_logging(console=False)

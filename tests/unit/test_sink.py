@@ -16,8 +16,8 @@ def reg() -> SecretRegistry:
 
 def test_json_and_text_writes_are_masked(tmp_path: Path, reg: SecretRegistry) -> None:
     run = RunEvidence(tmp_path, "r1", reg)
-    run.write_json("result.json", {"outputs": {"member": "48213"}, "token": "abc"})
-    run.write_text("notes.txt", "member 48213, ssn 123-45-6789")
+    run.save_json("result.json", {"outputs": {"member": "48213"}, "token": "abc"})
+    run.save_text("notes.txt", "member 48213, ssn 123-45-6789")
     data = json.loads(run.path("result.json").read_text())
     assert data["token"] == "[REDACTED:token]"
     assert "48213" not in json.dumps(data)
@@ -27,14 +27,14 @@ def test_json_and_text_writes_are_masked(tmp_path: Path, reg: SecretRegistry) ->
 def test_paths_cannot_escape_run_dir(tmp_path: Path) -> None:
     run = RunEvidence(tmp_path, "r1")
     with pytest.raises(ValueError, match="escapes"):
-        run.write_text("../../outside.txt", "x")
+        run.save_text("../../outside.txt", "x")
 
 
 def test_binary_writes_limited_to_allowlisted_suffixes(tmp_path: Path) -> None:
     run = RunEvidence(tmp_path, "r1")
-    run.write_bytes("shot.png", b"\x89PNG")
+    run.save_image("shot.png", b"\x89PNG")
     with pytest.raises(ValueError, match="binary writes"):
-        run.write_bytes("dump.txt", b"raw text would bypass masking")
+        run.save_image("dump.txt", b"raw text would bypass masking")
 
 
 def test_echo_masks_stdout(capsys: pytest.CaptureFixture[str], reg: SecretRegistry) -> None:
