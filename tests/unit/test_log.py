@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from cua.evidence.log import configure_logging, get_logger, log_context
+from cua.evidence.log import configure_logging, get_logger, log_context, run_context, span
 from cua.evidence.sink import RunEvidence
 from cua.security.masking import SecretRegistry, Sensitivity, use_registry
 
@@ -63,3 +63,72 @@ def test_exceptions_are_captured_and_masked(run: RunEvidence) -> None:
     [event] = read_events(run)
     assert "ValueError" in str(event["exc"])
     assert "123-45-6789" not in str(event["exc"])
+
+
+class TestCorrelation:
+    def test_run_context_sets_ids_and_request_defaults_to_run(self, run: RunEvidence) -> None:
+        with run_context("run_1"):
+            get_logger("replay").info("run.started")
+        [event] = read_events(run)
+        assert event["run_id"] == event["request_id"] == "run_1"
+        assert len(str(event["trace_id"])) == 32 and len(str(event["span_id"])) == 16
+        assert "parent_span_id" not in event
+
+    def test_valid_traceparent_joins_callers_trace(self, run: RunEvidence) -> None:
+        trace, parent = "4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7"
+        with run_context("run_1", request_id="req_9", traceparent=f"00-{trace}-{parent}-01"):
+            get_logger("replay").info("run.started")
+        [event] = read_events(run)
+        assert event["trace_id"] == trace and event["parent_span_id"] == parent
+        assert event["request_id"] == "req_9"
+
+    def test_malformed_traceparent_starts_a_new_trace(self, run: RunEvidence) -> None:
+        with run_context("run_1", traceparent="garbage"):
+            get_logger("replay").info("run.started")
+        [event] = read_events(run)
+        assert len(str(event["trace_id"])) == 32 and "parent_span_id" not in event
+
+    def test_span_nests_under_current_span(self, run: RunEvidence) -> None:
+        log = get_logger("replay")
+        with run_context("run_1"):
+            log.info("run.started")
+            with span(step_id="s1") as step_span:
+                log.info("step.started")
+        root, step = read_events(run)
+        assert step["span_id"] == step_span
+        assert step["parent_span_id"] == root["span_id"]
+        assert step["trace_id"] == root["trace_id"]
+
+    def test_all_digit_trace_ids_are_not_masked_as_account_numbers(self, run: RunEvidence) -> None:
+        with log_context(trace_id="1" * 32, span_id="1234567890123456"):
+            get_logger("replay").info("run.started")
+        [event] = read_events(run)
+        assert event["span_id"] == "1234567890123456"
+
+    def test_caller_supplied_request_id_is_still_masked(self, run: RunEvidence) -> None:
+        with run_context("run_1", request_id="ssn-123-45-6789"):
+            get_logger("replay").info("run.started")
+        [event] = read_events(run)
+        assert "123-45-6789" not in str(event["request_id"])
+
+
+def test_resource_fields_on_every_record(run: RunEvidence) -> None:
+    get_logger("replay").info("run.started")
+    [event] = read_events(run)
+    assert event["service"] == "cua" and event["env"] and event["version"]
+
+
+def test_json_console_format_writes_json_to_stdout(capsys: pytest.CaptureFixture[str]) -> None:
+    configure_logging(console_format="json")
+    try:
+        get_logger("replay").info("run.started", step_id="s1")
+    finally:
+        configure_logging(console=False)
+    line = capsys.readouterr().out.strip()
+    assert json.loads(line)["event"] == "run.started"
+
+
+def test_invalid_log_format_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_FORMAT", "xml")
+    with pytest.raises(ValueError, match="LOG_FORMAT"):
+        configure_logging()

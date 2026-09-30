@@ -1,8 +1,12 @@
 name: ci
 
 on:
-  push:
+  # Every PR action: opened, updated (new commits), reopened.
   pull_request:
+    types: [opened, synchronize, reopened]
+  # Post-merge check on main. Branch pushes are covered by their PR, so they don't run twice.
+  push:
+    branches: [main]
 
 jobs:
   check:
