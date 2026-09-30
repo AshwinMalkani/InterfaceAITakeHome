@@ -1,0 +1,18 @@
+# Regression cases: each one replays a capability against the local target app (no LLM)
+# and compares the masked Result against golden/<name>.json.
+#
+# Rule: every bug fix adds a case here.
+#
+# Example (cases are added from milestone M2 onward, once replay exists):
+#
+#   - name: balance_not_found
+#     description: Unknown member id returns a business outcome, not a failure
+#     capability: cu_core.member.get_share_balance
+#     tenant: alpha
+#     params: {member_id: "99999"}
+#     faults: []
+#     expect:
+#       result_type: business_outcome
+#       outcome: member_not_found
+
+cases: []
