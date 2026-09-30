@@ -43,6 +43,21 @@ from cua.surface.base import ActionFailed, DialogEvent, Observation, Resolved, T
 
 POLL_MS = 100
 
+# An element that is fixed/absolute, visible, and covers at least half the viewport is treated as
+# a blocking overlay. Legacy modals are almost always built this way (a dimmed full-screen div).
+_BLOCKING_OVERLAY_JS = """() => {
+  const area = window.innerWidth * window.innerHeight;
+  if (!area) return false;
+  for (const el of document.querySelectorAll('body *')) {
+    const s = getComputedStyle(el);
+    if ((s.position !== 'fixed' && s.position !== 'absolute') || s.display === 'none'
+        || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width * r.height >= 0.5 * area) return true;
+  }
+  return false;
+}"""
+
 # Visible cell text, ignoring a trailing/embedded ':' and whitespace differences.
 _NORM = "normalize-space(translate(., ':', ''))"
 
@@ -242,6 +257,15 @@ class WebSurface:
                 return any(self.check(c) for c in conditions)
         raise AssertionError(f"unhandled checkpoint {checkpoint!r}")
 
+    def blocking_overlay(self) -> str | None:
+        for frame in self.page.frames:
+            try:
+                if frame.evaluate(_BLOCKING_OVERLAY_JS):
+                    return "top" if frame is self.page.main_frame else frame.name
+            except PlaywrightError:  # frame navigating; it will be checked again next poll
+                continue
+        return None
+
     @staticmethod
     def _count(locator: Locator) -> int:
         try:
@@ -263,7 +287,10 @@ class WebSurface:
             frame = self._frame(target.frame)
             if frame is not None:
                 locators += [build_locator(frame, spec) for spec in target.strategies]
-        return self.page.screenshot(full_page=True, mask=locators, mask_color="#000000")
+        try:
+            return self.page.screenshot(full_page=True, mask=locators, mask_color="#000000")
+        except PlaywrightError as exc:
+            raise ActionFailed(_first_line(exc)) from None
 
 
 def _first_line(exc: Exception) -> str:

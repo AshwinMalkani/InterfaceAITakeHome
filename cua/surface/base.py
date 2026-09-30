@@ -79,6 +79,13 @@ class Surface(Protocol):
         """Evaluate a checkpoint once, without waiting. The engine owns waiting and timeouts."""
         ...
 
+    def blocking_overlay(self) -> str | None:
+        """Name of a frame (or "top") where something covers most of the view, else None.
+
+        Surface-specific heuristic for *unknown* blocking states: modals nobody declared.
+        """
+        ...
+
     def take_dialogs(self) -> list[DialogEvent]:
         """Dialogs handled since the last call (expected ones answered, unexpected ones dismissed)."""
         ...
