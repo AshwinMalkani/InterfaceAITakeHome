@@ -21,9 +21,11 @@ from cua.security.masking import SecretRegistry, safe_mask
 BINARY_SUFFIXES = frozenset({".png", ".jpg", ".zip"})
 
 
-def write_json(path: Path, data: Any, registry: SecretRegistry | None = None) -> Path:
+def write_json(
+    path: Path, data: Any, registry: SecretRegistry | None = None, *, sort_keys: bool = True
+) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(safe_mask(data, registry), indent=2, sort_keys=True) + "\n")
+    path.write_text(json.dumps(safe_mask(data, registry), indent=2, sort_keys=sort_keys) + "\n")
     return path
 
 

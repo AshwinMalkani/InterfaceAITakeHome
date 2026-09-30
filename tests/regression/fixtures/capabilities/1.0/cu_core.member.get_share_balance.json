@@ -1,0 +1,178 @@
+{
+  "schema_version": "1.0",
+  "id": "cu_core.member.get_share_balance",
+  "version": "1.0.0",
+  "status": "draft",
+  "description": "Look up a member by member number and return their name and share savings balance. Read-only.",
+  "app": {
+    "product": "cu_core",
+    "versions": ">=4.2 <5",
+    "surface": "web"
+  },
+  "entry_route": "/core/main",
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "5-digit member number",
+      "sensitivity": "pii",
+      "pattern": "\\d{5}"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "member_name",
+      "type": "string",
+      "description": "Member's full name as shown on the detail screen",
+      "sensitivity": "pii"
+    },
+    {
+      "name": "savings_balance",
+      "type": "decimal",
+      "description": "Current balance of the share savings account (suffix 00)",
+      "sensitivity": "pii"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Open member inquiry from the main menu",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "menu",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "link",
+              "name": "Member Inquiry"
+            },
+            {
+              "kind": "css",
+              "selector": "a[href*='member/search']"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "MEMBER INQUIRY",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s2",
+      "intent": "Enter the member number",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Member Number",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f1']"
+            }
+          ]
+        },
+        "value": "{{inputs.member_id}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s3",
+      "intent": "Run the search",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Search"
+            },
+            {
+              "kind": "css",
+              "selector": "form[name='frmSrch'] input[type='submit']"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "MEMBER DETAIL",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s4",
+      "intent": "Read the member's name",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "field_value",
+              "label": "Name"
+            }
+          ]
+        },
+        "output": "member_name",
+        "parse": "text"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s5",
+      "intent": "Read the share savings balance",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "table_cell",
+              "row": "Share Savings",
+              "column": "Balance"
+            }
+          ]
+        },
+        "output": "savings_balance",
+        "parse": "currency"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    }
+  ],
+  "success": {
+    "kind": "all_of",
+    "conditions": [
+      {
+        "kind": "text_present",
+        "text": "MEMBER DETAIL",
+        "frame": "main"
+      },
+      {
+        "kind": "url_matches",
+        "pattern": "^/core/member/detail\\?",
+        "frame": "main"
+      }
+    ]
+  },
+  "provenance": {
+    "source": "hand_written",
+    "notes": "Written by hand to build replay first (PLAN D12); discovery must emit this same format."
+  }
+}
