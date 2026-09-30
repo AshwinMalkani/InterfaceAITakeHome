@@ -27,7 +27,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from cua.security.masking import Sensitivity
 
-SCHEMA_VERSION = "1.0"
+SCHEMA_VERSION = "1.1"
+# Every version this code can load. 1.1 added `outcomes` (additive: all 1.0 artifacts are valid 1.1).
+SUPPORTED_SCHEMA_VERSIONS = ("1.0", "1.1")
+# Fields added after 1.0. They are omitted from the canonical form while empty, so an older artifact
+# serializes, and therefore hashes, exactly as it did before the upgrade. Otherwise a schema upgrade
+# would change every artifact's content hash and silently void approvals bound to it.
+ADDED_FIELDS = ("outcomes",)
 
 IDENTIFIER = r"^[a-z][a-z0-9_]*$"
 CAPABILITY_ID = r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$"  # dotted: product.domain.action
@@ -284,6 +290,24 @@ class Step(_Model):
         return self
 
 
+# --- business outcomes --------------------------------------------------------------------
+
+
+class OutcomeSpec(_Model):
+    """A legitimate, expected result other than success, e.g. "no such member".
+
+    Part of the contract, like a typed error in a function signature: the calling agent can see
+    every outcome it may get back. When `when` becomes true, replay stops and returns this outcome
+    (not a failure). `after_step` limits detection to that step and later, so an early page can't
+    trigger an outcome meant for a later one.
+    """
+
+    name: str = Field(pattern=IDENTIFIER)
+    description: str
+    when: Checkpoint
+    after_step: str | None = None
+
+
 # --- the capability -----------------------------------------------------------------------
 
 
@@ -302,7 +326,7 @@ class Provenance(_Model):
 
 
 class Capability(_Model):
-    schema_version: Literal["1.0"]
+    schema_version: Literal["1.0", "1.1"]
     id: str = Field(pattern=CAPABILITY_ID)
     version: str = Field(pattern=SEMVER)
     status: Status = Status.DRAFT
@@ -313,6 +337,7 @@ class Capability(_Model):
     outputs: list[OutputSpec] = []
     steps: list[Step] = Field(min_length=1)
     success: Checkpoint
+    outcomes: list[OutcomeSpec] = []
     provenance: Provenance
 
     @model_validator(mode="after")
@@ -320,6 +345,11 @@ class Capability(_Model):
         _unique([s.id for s in self.steps], "step id")
         _unique([p.name for p in self.inputs], "input")
         _unique([o.name for o in self.outputs], "output")
+        _unique([o.name for o in self.outcomes], "outcome")
+        step_ids = {s.id for s in self.steps}
+        for outcome in self.outcomes:
+            if outcome.after_step is not None and outcome.after_step not in step_ids:
+                raise ValueError(f"outcome {outcome.name!r} refers to unknown step {outcome.after_step!r}")
 
         declared_inputs = {p.name for p in self.inputs}
         used_inputs: set[str] = set()
@@ -367,8 +397,12 @@ class Capability(_Model):
         return max((s.risk for s in self.steps), key=_RISK_ORDER.index)
 
     def canonical_dict(self) -> dict[str, Any]:
-        """The serialized form: JSON-compatible, None fields omitted for readable diffs."""
-        return self.model_dump(mode="json", exclude_none=True)
+        """The serialized form: JSON-compatible, None fields and empty later-added fields omitted."""
+        data = self.model_dump(mode="json", exclude_none=True)
+        for name in ADDED_FIELDS:
+            if not data.get(name):
+                data.pop(name, None)
+        return data
 
     def content_hash(self) -> str:
         """Hash of what the capability *does*. Excludes status and provenance, so approving a
@@ -384,6 +418,7 @@ def _unique(values: list[str], what: str) -> None:
         raise ValueError(f"duplicate {what}: {duplicates}")
 
 
+OutcomeSpec.model_rebuild()
 AllOf.model_rebuild()
 AnyOf.model_rebuild()
 Step.model_rebuild()

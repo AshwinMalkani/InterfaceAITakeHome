@@ -164,3 +164,26 @@ class TestContentHash:
         data = minimal()
         data["steps"][0]["timeout_ms"] = 20_000
         assert Capability.model_validate(data).content_hash() != build().content_hash()
+
+
+class TestOutcomes:
+    OUTCOME = {"name": "member_not_found", "description": "d", "when": {"kind": "text_present", "text": "x"}}
+
+    def test_v1_0_artifacts_still_load_without_outcomes(self) -> None:
+        assert build().outcomes == []
+
+    def test_outcome_after_unknown_step_rejected(self) -> None:
+        invalid({**minimal(), "schema_version": "1.1", "outcomes": [{**self.OUTCOME, "after_step": "s9"}]},
+                "unknown step")
+
+    def test_duplicate_outcomes_rejected(self) -> None:
+        outcomes = [self.OUTCOME, self.OUTCOME]
+        invalid({**minimal(), "schema_version": "1.1", "outcomes": outcomes}, "duplicate outcome")
+
+    def test_outcomes_are_part_of_the_content_hash(self) -> None:
+        assert build(outcomes=[self.OUTCOME]).content_hash() != build().content_hash()
+
+    def test_schema_upgrade_does_not_change_old_artifacts_hash(self) -> None:
+        """A 1.0 artifact must serialize (and hash) identically after the 1.1 upgrade."""
+        assert "outcomes" not in build().canonical_dict()
+        assert build().content_hash() == build(outcomes=[]).content_hash()
