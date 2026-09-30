@@ -1,0 +1,1007 @@
+{
+  "$defs": {
+    "AllOf": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all_of": "#/$defs/AllOf",
+                "any_of": "#/$defs/AnyOf",
+                "element_visible": "#/$defs/ElementVisible",
+                "text_present": "#/$defs/TextPresent",
+                "url_matches": "#/$defs/UrlMatches"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextPresent"
+              },
+              {
+                "$ref": "#/$defs/ElementVisible"
+              },
+              {
+                "$ref": "#/$defs/UrlMatches"
+              },
+              {
+                "$ref": "#/$defs/AllOf"
+              },
+              {
+                "$ref": "#/$defs/AnyOf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "all_of",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "conditions"
+      ],
+      "title": "AllOf",
+      "type": "object"
+    },
+    "AnyOf": {
+      "additionalProperties": false,
+      "properties": {
+        "conditions": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "all_of": "#/$defs/AllOf",
+                "any_of": "#/$defs/AnyOf",
+                "element_visible": "#/$defs/ElementVisible",
+                "text_present": "#/$defs/TextPresent",
+                "url_matches": "#/$defs/UrlMatches"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextPresent"
+              },
+              {
+                "$ref": "#/$defs/ElementVisible"
+              },
+              {
+                "$ref": "#/$defs/UrlMatches"
+              },
+              {
+                "$ref": "#/$defs/AllOf"
+              },
+              {
+                "$ref": "#/$defs/AnyOf"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Conditions",
+          "type": "array"
+        },
+        "kind": {
+          "const": "any_of",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "conditions"
+      ],
+      "title": "AnyOf",
+      "type": "object"
+    },
+    "AppRef": {
+      "additionalProperties": false,
+      "properties": {
+        "product": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Product",
+          "type": "string"
+        },
+        "surface": {
+          "const": "web",
+          "default": "web",
+          "title": "Surface",
+          "type": "string"
+        },
+        "versions": {
+          "title": "Versions",
+          "type": "string"
+        }
+      },
+      "required": [
+        "product",
+        "versions"
+      ],
+      "title": "AppRef",
+      "type": "object"
+    },
+    "Click": {
+      "additionalProperties": false,
+      "properties": {
+        "dialog": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/DialogExpectation"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "kind": {
+          "const": "click",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        }
+      },
+      "required": [
+        "kind",
+        "target"
+      ],
+      "title": "Click",
+      "type": "object"
+    },
+    "ControlKind": {
+      "description": "Kinds of form control, independent of ARIA roles (password inputs have no ARIA role).",
+      "enum": [
+        "textbox",
+        "password",
+        "select",
+        "button",
+        "checkbox"
+      ],
+      "title": "ControlKind",
+      "type": "string"
+    },
+    "CssLocator": {
+      "additionalProperties": false,
+      "description": "Last resort. Only acceptable on stable attributes, e.g. a form field's `name`, which the\nserver depends on and therefore rarely changes.",
+      "properties": {
+        "kind": {
+          "const": "css",
+          "title": "Kind",
+          "type": "string"
+        },
+        "selector": {
+          "title": "Selector",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "selector"
+      ],
+      "title": "CssLocator",
+      "type": "object"
+    },
+    "DialogExpectation": {
+      "additionalProperties": false,
+      "description": "A native dialog this action is expected to raise, and how to answer it.\nAny dialog that is *not* expected is never answered blindly.",
+      "properties": {
+        "accept": {
+          "title": "Accept",
+          "type": "boolean"
+        },
+        "message_contains": {
+          "title": "Message Contains",
+          "type": "string"
+        }
+      },
+      "required": [
+        "accept",
+        "message_contains"
+      ],
+      "title": "DialogExpectation",
+      "type": "object"
+    },
+    "ElementVisible": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "element_visible",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        }
+      },
+      "required": [
+        "kind",
+        "target"
+      ],
+      "title": "ElementVisible",
+      "type": "object"
+    },
+    "Extract": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "extract",
+          "title": "Kind",
+          "type": "string"
+        },
+        "output": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Output",
+          "type": "string"
+        },
+        "parse": {
+          "$ref": "#/$defs/Parse",
+          "default": "text"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "output"
+      ],
+      "title": "Extract",
+      "type": "object"
+    },
+    "FieldValueLocator": {
+      "additionalProperties": false,
+      "description": "The cell immediately after a label cell: `Name: | Avery Testwood`.",
+      "properties": {
+        "kind": {
+          "const": "field_value",
+          "title": "Kind",
+          "type": "string"
+        },
+        "label": {
+          "title": "Label",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "label"
+      ],
+      "title": "FieldValueLocator",
+      "type": "object"
+    },
+    "Fill": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "fill",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        },
+        "value": {
+          "title": "Value",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "value"
+      ],
+      "title": "Fill",
+      "type": "object"
+    },
+    "LabelLocator": {
+      "additionalProperties": false,
+      "description": "Control associated with a <label> or aria-label. Useless on most legacy apps, great on modern ones.",
+      "properties": {
+        "kind": {
+          "const": "label",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "LabelLocator",
+      "type": "object"
+    },
+    "Navigate": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "navigate",
+          "title": "Kind",
+          "type": "string"
+        },
+        "route": {
+          "title": "Route",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "route"
+      ],
+      "title": "Navigate",
+      "type": "object"
+    },
+    "NearTextLocator": {
+      "additionalProperties": false,
+      "description": "A control in the same table row as a cell whose text is `anchor` (trailing ':' ignored).\n\nHow a human finds an unlabeled legacy field: \"the box next to 'Member Number'\".",
+      "properties": {
+        "anchor": {
+          "title": "Anchor",
+          "type": "string"
+        },
+        "control": {
+          "$ref": "#/$defs/ControlKind"
+        },
+        "kind": {
+          "const": "near_text",
+          "title": "Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "anchor",
+        "control"
+      ],
+      "title": "NearTextLocator",
+      "type": "object"
+    },
+    "OutputSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "public"
+        },
+        "type": {
+          "$ref": "#/$defs/ValueType"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "description"
+      ],
+      "title": "OutputSpec",
+      "type": "object"
+    },
+    "ParamSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "choices": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choices"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "pattern": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Pattern"
+        },
+        "sensitivity": {
+          "$ref": "#/$defs/Sensitivity",
+          "default": "public"
+        },
+        "type": {
+          "$ref": "#/$defs/ValueType",
+          "default": "string"
+        }
+      },
+      "required": [
+        "name",
+        "description"
+      ],
+      "title": "ParamSpec",
+      "type": "object"
+    },
+    "Parse": {
+      "description": "How extracted text becomes a typed output.",
+      "enum": [
+        "text",
+        "currency",
+        "integer"
+      ],
+      "title": "Parse",
+      "type": "string"
+    },
+    "Press": {
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "title": "Key",
+          "type": "string"
+        },
+        "kind": {
+          "const": "press",
+          "title": "Kind",
+          "type": "string"
+        },
+        "target": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Target"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "kind",
+        "key"
+      ],
+      "title": "Press",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "discovery_run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Discovery Run Id"
+        },
+        "model": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Model"
+        },
+        "notes": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Notes"
+        },
+        "recorded_at": {
+          "anyOf": [
+            {
+              "format": "date-time",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Recorded At"
+        },
+        "source": {
+          "enum": [
+            "hand_written",
+            "discovery"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Risk": {
+      "enum": [
+        "safe",
+        "reversible",
+        "irreversible"
+      ],
+      "title": "Risk",
+      "type": "string"
+    },
+    "RoleLocator": {
+      "additionalProperties": false,
+      "description": "Accessible role + name. Portable concept: web ARIA, Windows UIA, macOS AX all have it.",
+      "properties": {
+        "kind": {
+          "const": "role",
+          "title": "Kind",
+          "type": "string"
+        },
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "role": {
+          "title": "Role",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "role",
+        "name"
+      ],
+      "title": "RoleLocator",
+      "type": "object"
+    },
+    "Select": {
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "select",
+          "title": "Kind",
+          "type": "string"
+        },
+        "option": {
+          "title": "Option",
+          "type": "string"
+        },
+        "target": {
+          "$ref": "#/$defs/Target"
+        }
+      },
+      "required": [
+        "kind",
+        "target",
+        "option"
+      ],
+      "title": "Select",
+      "type": "object"
+    },
+    "Sensitivity": {
+      "enum": [
+        "public",
+        "pii",
+        "secret"
+      ],
+      "title": "Sensitivity",
+      "type": "string"
+    },
+    "Status": {
+      "enum": [
+        "draft",
+        "approved",
+        "deprecated"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "Step": {
+      "additionalProperties": false,
+      "properties": {
+        "action": {
+          "discriminator": {
+            "mapping": {
+              "click": "#/$defs/Click",
+              "extract": "#/$defs/Extract",
+              "fill": "#/$defs/Fill",
+              "navigate": "#/$defs/Navigate",
+              "press": "#/$defs/Press",
+              "select": "#/$defs/Select"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/Navigate"
+            },
+            {
+              "$ref": "#/$defs/Click"
+            },
+            {
+              "$ref": "#/$defs/Fill"
+            },
+            {
+              "$ref": "#/$defs/Select"
+            },
+            {
+              "$ref": "#/$defs/Press"
+            },
+            {
+              "$ref": "#/$defs/Extract"
+            }
+          ],
+          "title": "Action"
+        },
+        "expect": {
+          "anyOf": [
+            {
+              "discriminator": {
+                "mapping": {
+                  "all_of": "#/$defs/AllOf",
+                  "any_of": "#/$defs/AnyOf",
+                  "element_visible": "#/$defs/ElementVisible",
+                  "text_present": "#/$defs/TextPresent",
+                  "url_matches": "#/$defs/UrlMatches"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/$defs/TextPresent"
+                },
+                {
+                  "$ref": "#/$defs/ElementVisible"
+                },
+                {
+                  "$ref": "#/$defs/UrlMatches"
+                },
+                {
+                  "$ref": "#/$defs/AllOf"
+                },
+                {
+                  "$ref": "#/$defs/AnyOf"
+                }
+              ]
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Expect"
+        },
+        "id": {
+          "pattern": "^[a-z0-9_]+$",
+          "title": "Id",
+          "type": "string"
+        },
+        "intent": {
+          "title": "Intent",
+          "type": "string"
+        },
+        "risk": {
+          "$ref": "#/$defs/Risk"
+        },
+        "timeout_ms": {
+          "default": 10000,
+          "maximum": 120000,
+          "minimum": 100,
+          "title": "Timeout Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "id",
+        "intent",
+        "action",
+        "risk"
+      ],
+      "title": "Step",
+      "type": "object"
+    },
+    "TableCellLocator": {
+      "additionalProperties": false,
+      "description": "The cell in the row containing `row` text, under the column headed `column`.\n\nSurvives column reordering and new rows, because nothing is positional.",
+      "properties": {
+        "column": {
+          "title": "Column",
+          "type": "string"
+        },
+        "kind": {
+          "const": "table_cell",
+          "title": "Kind",
+          "type": "string"
+        },
+        "row": {
+          "title": "Row",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "row",
+        "column"
+      ],
+      "title": "TableCellLocator",
+      "type": "object"
+    },
+    "Target": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "strategies": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "css": "#/$defs/CssLocator",
+                "field_value": "#/$defs/FieldValueLocator",
+                "label": "#/$defs/LabelLocator",
+                "near_text": "#/$defs/NearTextLocator",
+                "role": "#/$defs/RoleLocator",
+                "table_cell": "#/$defs/TableCellLocator"
+              },
+              "propertyName": "kind"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/RoleLocator"
+              },
+              {
+                "$ref": "#/$defs/LabelLocator"
+              },
+              {
+                "$ref": "#/$defs/NearTextLocator"
+              },
+              {
+                "$ref": "#/$defs/FieldValueLocator"
+              },
+              {
+                "$ref": "#/$defs/TableCellLocator"
+              },
+              {
+                "$ref": "#/$defs/CssLocator"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Strategies",
+          "type": "array"
+        }
+      },
+      "required": [
+        "strategies"
+      ],
+      "title": "Target",
+      "type": "object"
+    },
+    "TextPresent": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "kind": {
+          "const": "text_present",
+          "title": "Kind",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "title": "TextPresent",
+      "type": "object"
+    },
+    "UrlMatches": {
+      "additionalProperties": false,
+      "properties": {
+        "frame": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame"
+        },
+        "kind": {
+          "const": "url_matches",
+          "title": "Kind",
+          "type": "string"
+        },
+        "pattern": {
+          "title": "Pattern",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "pattern"
+      ],
+      "title": "UrlMatches",
+      "type": "object"
+    },
+    "ValueType": {
+      "enum": [
+        "string",
+        "integer",
+        "decimal",
+        "boolean"
+      ],
+      "title": "ValueType",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "app": {
+      "$ref": "#/$defs/AppRef"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "entry_route": {
+      "title": "Entry Route",
+      "type": "string"
+    },
+    "id": {
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$",
+      "title": "Id",
+      "type": "string"
+    },
+    "inputs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/ParamSpec"
+      },
+      "title": "Inputs",
+      "type": "array"
+    },
+    "outputs": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OutputSpec"
+      },
+      "title": "Outputs",
+      "type": "array"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "schema_version": {
+      "const": "1.0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/Status",
+      "default": "draft"
+    },
+    "steps": {
+      "items": {
+        "$ref": "#/$defs/Step"
+      },
+      "minItems": 1,
+      "title": "Steps",
+      "type": "array"
+    },
+    "success": {
+      "discriminator": {
+        "mapping": {
+          "all_of": "#/$defs/AllOf",
+          "any_of": "#/$defs/AnyOf",
+          "element_visible": "#/$defs/ElementVisible",
+          "text_present": "#/$defs/TextPresent",
+          "url_matches": "#/$defs/UrlMatches"
+        },
+        "propertyName": "kind"
+      },
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextPresent"
+        },
+        {
+          "$ref": "#/$defs/ElementVisible"
+        },
+        {
+          "$ref": "#/$defs/UrlMatches"
+        },
+        {
+          "$ref": "#/$defs/AllOf"
+        },
+        {
+          "$ref": "#/$defs/AnyOf"
+        }
+      ],
+      "title": "Success"
+    },
+    "version": {
+      "pattern": "^\\d+\\.\\d+\\.\\d+$",
+      "title": "Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "schema_version",
+    "id",
+    "version",
+    "description",
+    "app",
+    "entry_route",
+    "steps",
+    "success",
+    "provenance"
+  ],
+  "title": "Capability",
+  "type": "object"
+}

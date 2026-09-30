@@ -1,7 +1,7 @@
 VENV ?= .venv
 PY := $(VENV)/bin/python
 
-.PHONY: setup lint typecheck test regress regress-update check app app-beta
+.PHONY: setup lint typecheck test regress regress-update check app app-beta schema
 
 setup:
 	python3 -m venv $(VENV)
@@ -25,6 +25,10 @@ regress:
 # Regenerate golden results deliberately; review the diff like code.
 regress-update:
 	REGRESS_UPDATE=1 $(PY) -m pytest -m regression
+
+# Regenerate the published JSON Schema for capability artifacts.
+schema:
+	$(PY) -c "from cua.artifact.store import write_json_schema; write_json_schema()"
 
 # Everything CI runs.
 check: lint typecheck test regress
