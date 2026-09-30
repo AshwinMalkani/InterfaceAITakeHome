@@ -4,12 +4,11 @@
     "id": "cu_core.member.get_share_balance",
     "version": "1.1.0"
   },
+  "description": "The operator lacks privileges for this record (e.g. employee accounts)",
   "duration_ms": "<normalized>",
-  "outputs": {
-    "member_name": "[PII:member_name]",
-    "savings_balance": "[PII:savings_balance]"
-  },
+  "outcome": "access_denied",
   "recoveries": [],
-  "type": "success",
+  "step_id": "s3",
+  "type": "business_outcome",
   "warnings": []
 }

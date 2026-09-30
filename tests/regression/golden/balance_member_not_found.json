@@ -4,12 +4,11 @@
     "id": "cu_core.member.get_share_balance",
     "version": "1.1.0"
   },
+  "description": "No member exists with this member number",
   "duration_ms": "<normalized>",
-  "outputs": {
-    "member_name": "[PII:member_name]",
-    "savings_balance": "[PII:savings_balance]"
-  },
+  "outcome": "member_not_found",
   "recoveries": [],
-  "type": "success",
+  "step_id": "s3",
+  "type": "business_outcome",
   "warnings": []
 }

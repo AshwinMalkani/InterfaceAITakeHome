@@ -1,7 +1,7 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "id": "cu_core.member.get_share_balance",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "status": "draft",
   "description": "Look up a member by member number and return their name and share savings balance. Read-only.",
   "app": {
@@ -171,6 +171,28 @@
       }
     ]
   },
+  "outcomes": [
+    {
+      "name": "member_not_found",
+      "description": "No member exists with this member number",
+      "when": {
+        "kind": "text_present",
+        "text": "No records found.",
+        "frame": "main"
+      },
+      "after_step": "s3"
+    },
+    {
+      "name": "invalid_member_number",
+      "description": "The application rejected the member number format (its rules can be stricter than the input pattern)",
+      "when": {
+        "kind": "text_present",
+        "text": "ERR 1042",
+        "frame": "main"
+      },
+      "after_step": "s3"
+    }
+  ],
   "provenance": {
     "source": "hand_written",
     "notes": "Written by hand to build replay first (PLAN D12); discovery must emit this same format."

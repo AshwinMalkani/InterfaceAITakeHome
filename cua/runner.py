@@ -15,7 +15,7 @@ from pathlib import Path
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import attach_handler, get_logger, run_context
 from cua.evidence.sink import RunEvidence
-from cua.profile import AppProfile
+from cua.profile import AppProfile, StateKind
 from cua.replay.engine import ReplayEngine
 from cua.replay.result import Result
 from cua.security.masking import SecretRegistry, use_registry
@@ -66,12 +66,22 @@ def replay(
         result: Result | None = ReplayEngine.check_inputs(capability, params)
         if result is None:
             with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms) as surface:
-                engine = ReplayEngine(surface, registry=registry, evidence=evidence)
+                # Signing on can't itself recover from "session expired", so that state is excluded.
+                sign_on_engine = ReplayEngine(
+                    surface, registry=registry, evidence=evidence,
+                    states=[s for s in profile.states if s.kind is not StateKind.SESSION_EXPIRED],
+                )
+
+                def reauthenticate() -> bool:
+                    return sign_on is not None and sign_on_engine.run(sign_on, credentials).type == "success"
+
                 if sign_on is not None:
-                    signed_on = engine.run(sign_on, credentials)
+                    signed_on = sign_on_engine.run(sign_on, credentials)
                     if signed_on.type != "success":
                         result = signed_on
                 if result is None:
+                    engine = ReplayEngine(surface, registry=registry, evidence=evidence,
+                                          states=profile.states, reauthenticate=reauthenticate)
                     result = engine.run(capability, params)
         evidence.save_json("result.json", result.model_dump(mode="json"))
         log.info("run.finished", result=result.type)

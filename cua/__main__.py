@@ -13,7 +13,7 @@ from cua.profile import load_profile
 from cua.runner import replay
 
 REPO = Path(__file__).resolve().parents[1]
-EXIT_CODES = {"success": 0, "failure": 1}
+EXIT_CODES = {"success": 0, "failure": 1, "business_outcome": 2}
 
 
 def _params(pairs: list[str]) -> dict[str, str]:

@@ -1,0 +1,29 @@
+{
+  "capability": {
+    "content_hash": "sha256:e7eb3ceed302ab460393ed54b0a10c0b47569eb47703211a7a5bf5e5640430d2",
+    "id": "cu_core.member.get_share_balance",
+    "version": "1.1.0"
+  },
+  "category": "unknown_state",
+  "duration_ms": "<normalized>",
+  "evidence": [
+    "cu_core.member.get_share_balance.s3.failure.png"
+  ],
+  "expected": null,
+  "message": "an undeclared overlay is blocking frame 'main'; not proceeding",
+  "needs_human": true,
+  "observed": {
+    "locations": {
+      "banner": "/core/banner",
+      "main": "/core/member/detail?mbr=[PII:member_id]",
+      "menu": "/core/menu",
+      "top": "/core/main"
+    },
+    "title": "Summit Valley Credit Union - CU-Core 4.2.7"
+  },
+  "recoveries": [],
+  "retryable": false,
+  "step_id": "s3",
+  "type": "failure",
+  "warnings": []
+}

@@ -9,7 +9,13 @@
     "member_name": "[PII:member_name]",
     "savings_balance": "[PII:savings_balance]"
   },
-  "recoveries": [],
+  "recoveries": [
+    {
+      "detail": "maintenance_notice",
+      "kind": "dismissed_interstitial",
+      "step_id": "s1"
+    }
+  ],
   "type": "success",
   "warnings": []
 }
