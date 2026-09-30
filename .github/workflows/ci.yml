@@ -17,4 +17,5 @@ jobs:
         with:
           python-version: "3.12"
       - run: make setup
+      - run: .venv/bin/python -m playwright install-deps chromium
       - run: make check

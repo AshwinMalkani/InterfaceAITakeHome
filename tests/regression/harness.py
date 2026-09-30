@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from pathlib import Path
 from typing import Any, Literal
 
@@ -22,6 +23,8 @@ GOLDEN_DIR = HERE / "golden"
 # Fields whose values legitimately change between runs; compared by presence only.
 VOLATILE_KEYS = frozenset({"run_id", "ts", "started_at", "finished_at", "duration_ms", "evidence_dir"})
 NORMALIZED = "<normalized>"
+# Masking tokens carry a per-run HMAC suffix ([PII:name#3f9a]); keep the field name, drop the suffix.
+_TOKEN_SUFFIX = re.compile(r"(\[PII:[a-z0-9_]+)#[0-9a-f]{4}\]")
 
 TEXT_SUFFIXES = frozenset({".json", ".jsonl", ".txt", ".md", ".html", ".yaml", ".log"})
 
@@ -44,7 +47,7 @@ class Case(BaseModel):
     capability: str
     tenant: str = "alpha"
     params: dict[str, Any] = {}
-    faults: list[str] = []
+    faults: list[dict[str, Any]] = []  # apps.cu_core.faults.Fault, armed before the run
     expect: Expectation
 
 
@@ -68,6 +71,8 @@ def normalize(value: Any) -> Any:
         return {k: NORMALIZED if k in VOLATILE_KEYS else normalize(v) for k, v in value.items()}
     if isinstance(value, list):
         return [normalize(v) for v in value]
+    if isinstance(value, str):
+        return _TOKEN_SUFFIX.sub(r"\1]", value)
     return value
 
 

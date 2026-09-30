@@ -7,6 +7,7 @@ setup:
 	python3 -m venv $(VENV)
 	$(PY) -m pip install -q --upgrade pip
 	$(PY) -m pip install -q -e ".[dev]"
+	$(PY) -m playwright install chromium
 
 lint:
 	$(PY) -m ruff check cua apps tests

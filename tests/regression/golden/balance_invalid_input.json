@@ -1,0 +1,17 @@
+{
+  "capability": {
+    "content_hash": "sha256:b8c18c8b7cd05f32d5fde319e406872f569ffb3dc8320156130d8861c079f9aa",
+    "id": "cu_core.member.get_share_balance",
+    "version": "1.0.0"
+  },
+  "category": "invalid_input",
+  "duration_ms": "<normalized>",
+  "evidence": [],
+  "expected": null,
+  "message": "input 'member_id': does not match pattern \\d{5}",
+  "observed": null,
+  "retryable": false,
+  "step_id": null,
+  "type": "failure",
+  "warnings": []
+}

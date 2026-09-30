@@ -1,0 +1,14 @@
+{
+  "capability": {
+    "content_hash": "sha256:b8c18c8b7cd05f32d5fde319e406872f569ffb3dc8320156130d8861c079f9aa",
+    "id": "cu_core.member.get_share_balance",
+    "version": "1.0.0"
+  },
+  "duration_ms": "<normalized>",
+  "outputs": {
+    "member_name": "[PII:member_name]",
+    "savings_balance": "[PII:savings_balance]"
+  },
+  "type": "success",
+  "warnings": []
+}
