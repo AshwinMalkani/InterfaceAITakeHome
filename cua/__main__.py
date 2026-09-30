@@ -38,6 +38,7 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--evidence-dir", type=Path, default=REPO / "runs")
     run.add_argument("--request-id", help="caller's request id, for correlating logs")
     run.add_argument("--headed", action="store_true", help="show the browser")
+    run.add_argument("--slow-mo", type=int, default=0, metavar="MS", help="delay each browser action (demos)")
     run.add_argument("--reveal", action="store_true", help="print real output values (default: masked)")
     args = parser.parse_args(argv)
 
@@ -53,6 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         evidence_root=args.evidence_dir,
         request_id=args.request_id,
         headless=not args.headed,
+        slow_mo_ms=args.slow_mo,
     )
     echo({"run_id": outcome.run_id, "evidence_dir": str(outcome.evidence_dir),
           "result": outcome.result.model_dump(mode="json")}, outcome.registry, reveal=args.reveal)

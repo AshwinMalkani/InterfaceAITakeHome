@@ -108,9 +108,10 @@ class WebSurface:
 
     @classmethod
     @contextmanager
-    def launch(cls, base_url: str, *, headless: bool = True) -> Iterator[WebSurface]:
+    def launch(cls, base_url: str, *, headless: bool = True, slow_mo_ms: int = 0) -> Iterator[WebSurface]:
+        """`slow_mo_ms` delays every browser action, for watching a run; never used in production."""
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=headless)
+            browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
             context = browser.new_context(
                 viewport={"width": 1280, "height": 800},
                 locale="en-US",

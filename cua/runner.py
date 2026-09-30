@@ -46,6 +46,7 @@ def replay(
     evidence_root: Path,
     request_id: str | None = None,
     headless: bool = True,
+    slow_mo_ms: int = 0,
 ) -> RunOutcome:
     capability = library.get(capability_id)
     if capability.app.product != profile.product:
@@ -64,7 +65,7 @@ def replay(
         log.info("run.started", capability=capability_id, base_url=base_url)
         result: Result | None = ReplayEngine.check_inputs(capability, params)
         if result is None:
-            with WebSurface.launch(base_url, headless=headless) as surface:
+            with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms) as surface:
                 engine = ReplayEngine(surface, registry=registry, evidence=evidence)
                 if sign_on is not None:
                     signed_on = engine.run(sign_on, credentials)
