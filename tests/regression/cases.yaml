@@ -3,16 +3,46 @@
 #
 # Rule: every bug fix adds a case here.
 #
-# Example (cases are added from milestone M2 onward, once replay exists):
-#
-#   - name: balance_not_found
-#     description: Unknown member id returns a business outcome, not a failure
-#     capability: cu_core.member.get_share_balance
-#     tenant: alpha
-#     params: {member_id: "99999"}
-#     faults: []
-#     expect:
-#       result_type: business_outcome
-#       outcome: member_not_found
+# faults: armed on the target app before the run (see apps/cu_core/faults.py), e.g.
+#   faults: [{kind: server_error, path: /member/detail}]
 
-cases: []
+cases:
+  - name: balance_happy_path
+    description: Known member on the base tenant returns name and savings balance
+    capability: cu_core.member.get_share_balance
+    tenant: alpha
+    params: {member_id: "10001"}
+    expect:
+      result_type: success
+      outputs: {member_name: Avery Testwood, savings_balance: "4719.56"}
+
+  - name: balance_second_member
+    description: Same capability, different input; proves parameterization, not a memorized run
+    capability: cu_core.member.get_share_balance
+    tenant: alpha
+    params: {member_id: "10004"}
+    expect:
+      result_type: success
+      outputs: {member_name: Casey Fakeley, savings_balance: "9295.94"}
+
+  - name: balance_invalid_input
+    description: Malformed member id is rejected against the input contract before the browser opens
+    capability: cu_core.member.get_share_balance
+    tenant: alpha
+    params: {member_id: "12ab"}
+    expect:
+      result_type: failure
+      category: invalid_input
+
+  - name: balance_beta_tenant_drift
+    description: >
+      Beta relabels fields. Search field and button fall back to name-attribute css (drift warnings);
+      the relabelled 'Primary Share' row has no fallback, so replay stops at s5 with a clear failure.
+      Becomes a success once tenant overrides land (stretch goal).
+    capability: cu_core.member.get_share_balance
+    tenant: beta
+    params: {member_id: "10001"}
+    expect:
+      result_type: failure
+      category: target_not_found
+      failed_step: s5

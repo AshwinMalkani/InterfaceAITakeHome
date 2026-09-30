@@ -43,10 +43,10 @@ def write_bytes(path: Path, data: bytes) -> Path:
     return path
 
 
-def echo(value: Any, registry: SecretRegistry | None = None) -> None:
-    """Masked stdout output for the CLI."""
-    masked = safe_mask(value, registry)
-    text = masked if isinstance(masked, str) else json.dumps(masked, indent=2, sort_keys=True)
+def echo(value: Any, registry: SecretRegistry | None = None, *, reveal: bool = False) -> None:
+    """Masked stdout output for the CLI. `reveal=True` is an explicit operator opt-in to raw values."""
+    shown = value if reveal else safe_mask(value, registry)
+    text = shown if isinstance(shown, str) else json.dumps(shown, indent=2, sort_keys=True, default=str)
     sys.stdout.write(text + "\n")
 
 
@@ -65,13 +65,16 @@ class RunEvidence:
             raise ValueError(f"evidence path escapes run directory: {relative!r}")
         return target
 
-    def write_json(self, relative: str, data: Any) -> Path:
+    # Named save_* (not write_*) so the egress guard can tell masked sink calls apart from raw
+    # pathlib writes like Path.write_text, which are forbidden outside this module.
+
+    def save_json(self, relative: str, data: Any) -> Path:
         return write_json(self.path(relative), data, self.registry)
 
-    def write_text(self, relative: str, text: str) -> Path:
+    def save_text(self, relative: str, text: str) -> Path:
         return write_text(self.path(relative), text, self.registry)
 
-    def write_bytes(self, relative: str, data: bytes) -> Path:
+    def save_image(self, relative: str, data: bytes) -> Path:
         return write_bytes(self.path(relative), data)
 
     def log_handler(self) -> logging.Handler:

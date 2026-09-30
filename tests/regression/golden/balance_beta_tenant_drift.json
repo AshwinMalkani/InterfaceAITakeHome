@@ -1,0 +1,38 @@
+{
+  "capability": {
+    "content_hash": "sha256:b8c18c8b7cd05f32d5fde319e406872f569ffb3dc8320156130d8861c079f9aa",
+    "id": "cu_core.member.get_share_balance",
+    "version": "1.0.0"
+  },
+  "category": "target_not_found",
+  "duration_ms": "<normalized>",
+  "evidence": [
+    "cu_core.member.get_share_balance.s5.failure.png"
+  ],
+  "expected": "'Balance' cell of the 'Share Savings' row in frame 'main'",
+  "message": "no unique match ('Balance' cell of the 'Share Savings' row: 0 matches)",
+  "observed": {
+    "locations": {
+      "banner": "/core/banner",
+      "main": "/core/member/detail?mbr=[PII:member_id]",
+      "menu": "/core/menu",
+      "top": "/core/main"
+    },
+    "title": "Harbor Point FCU - CU-Core 4.3.1"
+  },
+  "retryable": false,
+  "step_id": "s5",
+  "type": "failure",
+  "warnings": [
+    {
+      "detail": "preferred \"textbox in the row of 'Member Number'\" did not match; used fallback #1 (css)",
+      "kind": "locator_fallback",
+      "step_id": "s2"
+    },
+    {
+      "detail": "preferred \"button named 'Search'\" did not match; used fallback #1 (css)",
+      "kind": "locator_fallback",
+      "step_id": "s3"
+    }
+  ]
+}
