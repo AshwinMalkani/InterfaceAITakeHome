@@ -1,0 +1,44 @@
+[project]
+name = "cua"
+version = "0.1.0"
+description = "Computer-use automation: LLM discovery -> typed capability artifacts -> deterministic replay"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "mypy>=1.10",
+    "ruff>=0.5",
+    "types-PyYAML",
+]
+
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["cua*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+    "regression: end-to-end regression suite (run with `make regress`; no LLM/API key required)",
+]
+addopts = "-ra --strict-markers"
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+packages = ["cua"]
+plugins = ["pydantic.mypy"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM"]
