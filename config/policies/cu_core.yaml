@@ -1,0 +1,21 @@
+# Safety policy for cu_core: the security boundary for all automation on this product.
+# Owned and reviewed separately from the app profile (config/apps/cu_core.yaml).
+product: cu_core
+
+# Only the tenant's own origin is ever reachable (derived from the run's base URL, so no tenant
+# hostnames live here). On that origin, only these routes; deny rules win.
+allowed_routes:
+  - ^/login
+  - ^/core/
+blocked_routes:
+  - ^/__              # test/admin endpoints of the target app
+  - ^/core/signoff    # never end the operator's session as a side effect
+
+allowed_actions: [navigate, click, fill, select, press, extract]
+
+risk:
+  # Safe and reversible steps run unattended. Irreversible steps need the capability's current
+  # content to be approved AND the caller to pass allow_irreversible for that run.
+  unattended_max: reversible
+  irreversible_keywords:
+    [confirm, submit, commit, transfer, delete, remove, close, post, approve, pay, disburse, withdraw]
