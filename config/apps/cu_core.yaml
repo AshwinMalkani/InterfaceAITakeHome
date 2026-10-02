@@ -39,3 +39,40 @@ states:
     kind: business
     description: The operator lacks privileges for this record (e.g. employee accounts)
     when: {kind: text_present, text: "ERR 0403", frame: main}
+
+# Product UI labels and headings that are safe to show in redacted failure screenshots
+# (everything else on screen is masked). Labels only: never values.
+ui_vocabulary:
+  - Main Menu
+  - Reports
+  - GL Posting
+  - Sign Off
+  - WELCOME
+  - Select a function from the menu.
+  - Operator
+  - Member Since
+  - Name
+  - Tax ID
+  - Phone
+  - Suffix
+  - Description
+  - Balance
+  - Available
+  - Share Draft Checking
+  - Open Sub-Account
+  - Account Type
+  - Nickname
+  - Opening Deposit
+  - Funding Account
+  - "-- select --"
+  - Share Certificate
+  - Money Market
+  - Holiday Club
+  - Continue
+  - Cancel
+  - Confirmation Number
+  - New Suffix
+  - Member
+  - User ID
+  - Password
+  - Sign On

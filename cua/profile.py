@@ -56,6 +56,8 @@ class AppProfile(BaseModel):
     product: str = Field(pattern=IDENTIFIER)
     sign_on: SignOn | None = None
     states: list[KnownState] = []
+    # UI labels and headings of the product that are safe to show in redacted screenshots.
+    ui_vocabulary: list[str] = []
 
     def sign_on_params(self) -> dict[str, str]:
         """Read credentials from the environment. Error messages name the variable, never a value."""
