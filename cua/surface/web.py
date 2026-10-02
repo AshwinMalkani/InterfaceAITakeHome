@@ -14,11 +14,11 @@ from __future__ import annotations
 
 import re
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from urllib.parse import urlsplit
 
-from playwright.sync_api import Dialog, Frame, Locator, Page, sync_playwright
+from playwright.sync_api import Dialog, Frame, Locator, Page, Route, sync_playwright
 from playwright.sync_api import Error as PlaywrightError
 
 from cua.artifact.schema import (
@@ -114,16 +114,31 @@ def _path(url: str) -> str:
 
 
 class WebSurface:
-    def __init__(self, page: Page, base_url: str) -> None:
+    def __init__(
+        self, page: Page, base_url: str, *, request_filter: Callable[[str], bool] | None = None
+    ) -> None:
         self.page = page
         self.base_url = base_url.rstrip("/")
         self._expected_dialog: DialogExpectation | None = None
         self._dialogs: list[DialogEvent] = []
+        self._blocked: list[str] = []
+        self._request_filter = request_filter
         page.on("dialog", self._on_dialog)
+        if request_filter is not None:
+            # Network-level enforcement: every request (navigations, frames, XHR, images) passes
+            # the filter, so a click that leads somewhere disallowed is stopped as well.
+            page.route("**/*", self._filter_request)
 
     @classmethod
     @contextmanager
-    def launch(cls, base_url: str, *, headless: bool = True, slow_mo_ms: int = 0) -> Iterator[WebSurface]:
+    def launch(
+        cls,
+        base_url: str,
+        *,
+        headless: bool = True,
+        slow_mo_ms: int = 0,
+        request_filter: Callable[[str], bool] | None = None,
+    ) -> Iterator[WebSurface]:
         """`slow_mo_ms` delays every browser action, for watching a run; never used in production."""
         with sync_playwright() as pw:
             browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
@@ -134,10 +149,24 @@ class WebSurface:
                 reduced_motion="reduce",
             )
             try:
-                yield cls(context.new_page(), base_url)
+                yield cls(context.new_page(), base_url, request_filter=request_filter)
             finally:
                 context.close()
                 browser.close()
+
+    # --- network policy -----------------------------------------------------------------
+
+    def _filter_request(self, route: Route) -> None:
+        url = route.request.url
+        if self._request_filter is not None and not self._request_filter(url):
+            self._blocked.append(url)
+            route.abort("blockedbyclient")
+        else:
+            route.continue_()
+
+    def take_blocked_requests(self) -> list[str]:
+        blocked, self._blocked = self._blocked, []
+        return blocked
 
     # --- dialogs ------------------------------------------------------------------------
 
@@ -200,6 +229,8 @@ class WebSurface:
         try:
             self.page.goto(self.base_url + route, wait_until="load")
         except PlaywrightError as exc:
+            if self._blocked:  # aborted by policy: the engine reports the violation, not a nav error
+                return
             raise ActionFailed(_first_line(exc)) from None
 
     def click(self, resolved: Resolved, dialog: DialogExpectation | None, timeout_ms: int) -> None:

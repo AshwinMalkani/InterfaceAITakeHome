@@ -1,0 +1,394 @@
+{
+  "schema_version": "1.1",
+  "id": "cu_core.member.open_sub_account",
+  "version": "1.0.0",
+  "status": "draft",
+  "description": "Open a new sub-account for a member, funded from their share savings, and return the confirmation number. IRREVERSIBLE: moves money and creates an account.",
+  "app": {
+    "product": "cu_core",
+    "versions": ">=4.2 <5",
+    "surface": "web"
+  },
+  "entry_route": "/core/main",
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "5-digit member number",
+      "sensitivity": "pii",
+      "pattern": "\\d{5}"
+    },
+    {
+      "name": "account_type",
+      "type": "string",
+      "description": "Type of sub-account to open",
+      "sensitivity": "public",
+      "choices": [
+        "Share Certificate",
+        "Money Market",
+        "Holiday Club"
+      ]
+    },
+    {
+      "name": "nickname",
+      "type": "string",
+      "description": "Nickname shown on statements",
+      "sensitivity": "public"
+    },
+    {
+      "name": "opening_deposit",
+      "type": "decimal",
+      "description": "Amount moved from share savings",
+      "sensitivity": "pii"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "confirmation_number",
+      "type": "string",
+      "description": "Core system confirmation, e.g. C-004512",
+      "sensitivity": "public"
+    },
+    {
+      "name": "new_suffix",
+      "type": "string",
+      "description": "Suffix of the newly opened sub-account",
+      "sensitivity": "public"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Open member inquiry from the main menu",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "menu",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "link",
+              "name": "Member Inquiry"
+            },
+            {
+              "kind": "css",
+              "selector": "a[href*='member/search']"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "MEMBER INQUIRY",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s2",
+      "intent": "Enter the member number",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Member Number",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f1']"
+            }
+          ]
+        },
+        "value": "{{inputs.member_id}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s3",
+      "intent": "Run the search",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Search"
+            },
+            {
+              "kind": "css",
+              "selector": "form[name='frmSrch'] input[type='submit']"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "MEMBER DETAIL",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s4",
+      "intent": "Start opening a sub-account",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Open Sub-Account"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "OPEN SUB-ACCOUNT",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s5",
+      "intent": "Choose the account type",
+      "action": {
+        "kind": "select",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Account Type",
+              "control": "select"
+            },
+            {
+              "kind": "css",
+              "selector": "select[name='f2']"
+            }
+          ]
+        },
+        "option": "{{inputs.account_type}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s6",
+      "intent": "Enter the nickname",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Nickname",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f3']"
+            }
+          ]
+        },
+        "value": "{{inputs.nickname}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s7",
+      "intent": "Enter the opening deposit",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Opening Deposit",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f4']"
+            }
+          ]
+        },
+        "value": "{{inputs.opening_deposit}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s8",
+      "intent": "Fund from share savings (suffix 00)",
+      "action": {
+        "kind": "select",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Funding Account",
+              "control": "select"
+            },
+            {
+              "kind": "css",
+              "selector": "select[name='f5']"
+            }
+          ]
+        },
+        "option": "00 - Share Savings"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s9",
+      "intent": "Continue to the review screen",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Continue"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "REVIEW NEW SUB-ACCOUNT",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s10",
+      "intent": "Confirm and open the account",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Confirm"
+            }
+          ]
+        },
+        "dialog": {
+          "accept": true,
+          "message_contains": "cannot be undone"
+        }
+      },
+      "risk": "irreversible",
+      "expect": {
+        "kind": "text_present",
+        "text": "SUB-ACCOUNT OPENED",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s11",
+      "intent": "Read the confirmation number",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "field_value",
+              "label": "Confirmation Number"
+            }
+          ]
+        },
+        "output": "confirmation_number",
+        "parse": "text"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s12",
+      "intent": "Read the new suffix",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "field_value",
+              "label": "New Suffix"
+            }
+          ]
+        },
+        "output": "new_suffix",
+        "parse": "text"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    }
+  ],
+  "success": {
+    "kind": "text_present",
+    "text": "SUB-ACCOUNT OPENED",
+    "frame": "main"
+  },
+  "outcomes": [
+    {
+      "name": "member_not_found",
+      "description": "No member exists with this member number",
+      "when": {
+        "kind": "text_present",
+        "text": "No records found.",
+        "frame": "main"
+      },
+      "after_step": "s3"
+    },
+    {
+      "name": "insufficient_funds",
+      "description": "Share savings can't cover the opening deposit",
+      "when": {
+        "kind": "text_present",
+        "text": "ERR 2210",
+        "frame": "main"
+      },
+      "after_step": "s9"
+    },
+    {
+      "name": "below_minimum_deposit",
+      "description": "Opening deposit is under the product minimum",
+      "when": {
+        "kind": "text_present",
+        "text": "ERR 2202",
+        "frame": "main"
+      },
+      "after_step": "s9"
+    }
+  ],
+  "provenance": {
+    "source": "hand_written",
+    "notes": "Irreversible capability for policy gating and the human-approval demo."
+  }
+}

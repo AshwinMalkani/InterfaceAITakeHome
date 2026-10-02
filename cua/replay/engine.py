@@ -16,6 +16,10 @@ Every poll of every wait is a race, checked in this order:
 States are checked *before* the post-condition on purpose: the expected text can be present
 underneath a blocking modal, and "success" must never be reported through one.
 
+Policy (when a PolicyGate is given): rendered routes are checked before navigating, requests the
+surface blocked fail the step, and a step above the policy's unattended risk stops *before acting*
+unless the capability's current content is approved and the caller allowed irreversible actions.
+
 Retries: a step is retried once after a post-condition timeout only if its risk is `safe`.
 Irreversible steps are never retried or restarted: repeating "Confirm" on a legacy app with no
 idempotency token opens a second account.
@@ -46,6 +50,7 @@ from cua.artifact.schema import (
 )
 from cua.evidence.log import get_logger, log_context, span
 from cua.evidence.sink import RunEvidence
+from cua.policy import PolicyGate, PolicyViolation
 from cua.profile import KnownState, StateKind
 from cua.replay.describe import describe_checkpoint, describe_locator, describe_target
 from cua.replay.result import (
@@ -151,6 +156,7 @@ class ReplayEngine:
         evidence: RunEvidence | None = None,
         states: Sequence[KnownState] = (),
         reauthenticate: Callable[[], bool] | None = None,
+        gate: PolicyGate | None = None,
         success_timeout_ms: int = SUCCESS_TIMEOUT_MS,
         dismiss_timeout_ms: int = DISMISS_TIMEOUT_MS,
     ) -> None:
@@ -159,6 +165,7 @@ class ReplayEngine:
         self.evidence = evidence
         self.states = list(states)
         self.reauthenticate = reauthenticate
+        self.gate = gate
         self.success_timeout_ms = success_timeout_ms
         self.dismiss_timeout_ms = dismiss_timeout_ms
 
@@ -170,6 +177,18 @@ class ReplayEngine:
         except InputError as exc:
             return Failure(capability=_ref(capability), category=FailureCategory.INVALID_INPUT, step_id=None,
                            message=str(exc), retryable=False, duration_ms=0)
+        return None
+
+    @staticmethod
+    def preflight(
+        capability: Capability, params: Mapping[str, object], gate: PolicyGate | None
+    ) -> Failure | None:
+        """Everything checkable before a browser opens: the input contract, then the policy."""
+        if (invalid := ReplayEngine.check_inputs(capability, params)) is not None:
+            return invalid
+        if gate is not None and (problems := gate.preflight(capability)):
+            return Failure(capability=_ref(capability), category=FailureCategory.POLICY_DENIED, step_id=None,
+                           message="; ".join(problems), retryable=False, duration_ms=0)
         return None
 
     def run(self, capability: Capability, params: Mapping[str, object]) -> Result:
@@ -187,8 +206,9 @@ class ReplayEngine:
     def _run(self, capability: Capability, params: Mapping[str, object]) -> Result:
         started = time.monotonic()
         log.info("capability.started", steps=len(capability.steps), max_risk=capability.max_risk)
-        if (invalid := self.check_inputs(capability, params)) is not None:
-            return invalid
+        if (rejected := self.preflight(capability, params, self.gate)) is not None:
+            log.warning("capability.rejected", category=rejected.category, message=rejected.message)
+            return rejected
         values = validate_inputs(capability, params)
         for spec in capability.inputs:
             self.registry.register(spec.name, values[spec.name], spec.sensitivity)
@@ -255,7 +275,8 @@ class ReplayEngine:
             try:
                 self._await(step.expect, step.timeout_ms, step.id, state)
             except StepFailure as failure:
-                if failure.category is not FailureCategory.CHECKPOINT_FAILED or step.risk is not Risk.SAFE:
+                timed_out = failure.category is FailureCategory.CHECKPOINT_FAILED
+                if not (timed_out and self._risk(step) is Risk.SAFE):
                     raise
                 state.recoveries.append(Recovery(kind="retried_step", step_id=step.id,
                                                  detail="post-condition timed out; safe step retried once"))
@@ -269,7 +290,13 @@ class ReplayEngine:
         action = step.action
         target = getattr(action, "target", None)
         resolved = self._resolve(step, target, state) if target is not None else None
-        if step.risk is Risk.IRREVERSIBLE:
+        risk = self._risk(step)
+        if self.gate is not None and self.gate.policy.needs_approval(step):
+            if (blocker := self.gate.irreversible_blocker(state.capability)) is not None:
+                raise StepFailure(FailureCategory.APPROVAL_REQUIRED, step.id,
+                                  f"stopped before {risk} step {step.intent!r}: {blocker}")
+            log.info("policy.irreversible_authorized", intent=step.intent)
+        if risk is Risk.IRREVERSIBLE:
             state.irreversible_started = True
         try:
             match action:
@@ -295,6 +322,10 @@ class ReplayEngine:
                               expected=f"{action.kind} on {describe_target(target)}") from None
         self._check_dialogs(step.id, expected=action.dialog if isinstance(action, Click) else None)
         return resolved
+
+    def _risk(self, step: Step) -> Risk:
+        """Effective risk: the policy's heuristic can raise a step's declared risk, never lower it."""
+        return self.gate.policy.effective_risk(step) if self.gate else step.risk
 
     def _resolve(self, step: Step, target: Target, state: _RunState) -> Resolved:
         try:
@@ -328,6 +359,11 @@ class ReplayEngine:
         log.info("output.extracted", output=spec.name, value=value)
 
     def _goto(self, route: str, step_id: str) -> None:
+        if self.gate is not None:
+            try:
+                self.gate.check_route(route)
+            except PolicyViolation as exc:
+                raise StepFailure(FailureCategory.POLICY_DENIED, step_id, str(exc)) from None
         try:
             self.surface.goto(route)
         except ActionFailed as exc:
@@ -353,6 +389,9 @@ class ReplayEngine:
 
     def _scan(self, step_id: str, state: _RunState) -> None:
         """Steps 1-4 of the race (see module docstring). Returns normally if nothing is in the way."""
+        if blocked := self.surface.take_blocked_requests():
+            raise StepFailure(FailureCategory.POLICY_DENIED, step_id,
+                              f"blocked {len(blocked)} request(s) outside the allowlist, first: {blocked[0]}")
         self._check_dialogs(step_id)
         for known in self.states:
             if not self.surface.check(known.when):
