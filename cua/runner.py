@@ -15,6 +15,7 @@ from pathlib import Path
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import attach_handler, get_logger, run_context
 from cua.evidence.sink import RunEvidence
+from cua.policy import ApprovalLedger, Policy, PolicyGate
 from cua.profile import AppProfile, StateKind
 from cua.replay.engine import ReplayEngine
 from cua.replay.result import Result
@@ -43,7 +44,10 @@ def replay(
     base_url: str,
     library: CapabilityLibrary,
     profile: AppProfile,
+    policy: Policy,
+    approvals: ApprovalLedger,
     evidence_root: Path,
+    allow_irreversible: bool = False,
     request_id: str | None = None,
     headless: bool = True,
     slow_mo_ms: int = 0,
@@ -53,6 +57,7 @@ def replay(
         raise ValueError(f"{capability_id} targets {capability.app.product!r}, not {profile.product!r}")
     sign_on = library.get(profile.sign_on.capability) if profile.sign_on else None
     credentials = profile.sign_on_params()  # fail fast on missing config, before opening a browser
+    gate = PolicyGate(policy, base_url=base_url, approvals=approvals, allow_irreversible=allow_irreversible)
 
     run_id = new_run_id()
     registry = SecretRegistry()
@@ -62,13 +67,15 @@ def replay(
         use_registry(registry),
         run_context(run_id, request_id=request_id, mode="replay"),
     ):
-        log.info("run.started", capability=capability_id, base_url=base_url)
-        result: Result | None = ReplayEngine.check_inputs(capability, params)
+        log.info("run.started", capability=capability_id, base_url=base_url,
+                 allow_irreversible=allow_irreversible)
+        result: Result | None = ReplayEngine.preflight(capability, params, gate)
         if result is None:
-            with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms) as surface:
+            with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms,
+                                   request_filter=gate.allows_request) as surface:
                 # Signing on can't itself recover from "session expired", so that state is excluded.
                 sign_on_engine = ReplayEngine(
-                    surface, registry=registry, evidence=evidence,
+                    surface, registry=registry, evidence=evidence, gate=gate,
                     states=[s for s in profile.states if s.kind is not StateKind.SESSION_EXPIRED],
                 )
 
@@ -80,7 +87,7 @@ def replay(
                     if signed_on.type != "success":
                         result = signed_on
                 if result is None:
-                    engine = ReplayEngine(surface, registry=registry, evidence=evidence,
+                    engine = ReplayEngine(surface, registry=registry, evidence=evidence, gate=gate,
                                           states=profile.states, reauthenticate=reauthenticate)
                     result = engine.run(capability, params)
         evidence.save_json("result.json", result.model_dump(mode="json"))

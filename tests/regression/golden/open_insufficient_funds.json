@@ -1,0 +1,14 @@
+{
+  "capability": {
+    "content_hash": "sha256:93beac72e8797d8c26725751345ebf7f286d33606b9a36a4643d777d9f242a2a",
+    "id": "cu_core.member.open_sub_account",
+    "version": "1.0.0"
+  },
+  "description": "Share savings can't cover the opening deposit",
+  "duration_ms": "<normalized>",
+  "outcome": "insufficient_funds",
+  "recoveries": [],
+  "step_id": "s9",
+  "type": "business_outcome",
+  "warnings": []
+}

@@ -120,3 +120,37 @@ cases:
       failed_step: s3
       needs_human: true
       retryable: false
+
+  # --- safety policy (M3): irreversible steps need approval of the exact content + explicit allow ---
+
+  - name: open_requires_approval
+    description: >
+      Irreversible capability, not approved: runs through the safe steps (search, form, review) and stops
+      right before Confirm, asking for a human. Confirm is never clicked.
+    capability: cu_core.member.open_sub_account
+    params: {member_id: "10002", account_type: Money Market, nickname: Rainy day, opening_deposit: "100.00"}
+    allow_irreversible: true
+    expect:
+      result_type: failure
+      category: approval_required
+      failed_step: s10
+      needs_human: true
+      retryable: false
+
+  - name: open_insufficient_funds
+    description: The app rejects the deposit on the form (ERR 2210) before anything irreversible; a business outcome
+    capability: cu_core.member.open_sub_account
+    params: {member_id: "10002", account_type: Money Market, nickname: Rainy day, opening_deposit: "99999999"}
+    expect:
+      result_type: business_outcome
+      outcome: insufficient_funds
+
+  - name: open_approved_and_allowed
+    description: Approved content plus explicit allow; the declared confirm dialog is accepted and the account opens
+    capability: cu_core.member.open_sub_account
+    params: {member_id: "10002", account_type: Money Market, nickname: Rainy day, opening_deposit: "100.00"}
+    approved: true
+    allow_irreversible: true
+    expect:
+      result_type: success
+      outputs: {confirmation_number: C-004501, new_suffix: "20"}

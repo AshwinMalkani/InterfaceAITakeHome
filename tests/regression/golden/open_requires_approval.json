@@ -1,0 +1,29 @@
+{
+  "capability": {
+    "content_hash": "sha256:93beac72e8797d8c26725751345ebf7f286d33606b9a36a4643d777d9f242a2a",
+    "id": "cu_core.member.open_sub_account",
+    "version": "1.0.0"
+  },
+  "category": "approval_required",
+  "duration_ms": "<normalized>",
+  "evidence": [
+    "cu_core.member.open_sub_account.s10.failure.png"
+  ],
+  "expected": null,
+  "message": "stopped before irreversible step 'Confirm and open the account': capability's current content is not approved",
+  "needs_human": true,
+  "observed": {
+    "locations": {
+      "banner": "/core/banner",
+      "main": "/core/member/subacct/review",
+      "menu": "/core/menu",
+      "top": "/core/main"
+    },
+    "title": "Summit Valley Credit Union - CU-Core 4.2.7"
+  },
+  "recoveries": [],
+  "retryable": false,
+  "step_id": "s10",
+  "type": "failure",
+  "warnings": []
+}

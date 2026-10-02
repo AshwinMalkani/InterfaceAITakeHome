@@ -9,6 +9,7 @@ import pytest
 
 from apps.cu_core.data import MemberStore
 from cua.artifact.store import CapabilityLibrary
+from cua.policy import ApprovalLedger, load_policy
 from cua.profile import load_profile
 from cua.replay.result import BusinessOutcome, Failure, Success
 from cua.runner import replay
@@ -28,13 +29,21 @@ def test_case(case: Case, target_apps: dict[str, TargetApp], tmp_path: Path) -> 
     app.reset()
     app.arm(case.faults)
 
+    product = case.capability.split(".", 1)[0]
+    approvals = ApprovalLedger(tmp_path / "approvals.json")  # never the committed ledger
+    if case.approved:
+        approvals.approve(LIBRARY.get(case.capability), "regression-suite")
+
     outcome = replay(
         case.capability,
         case.params,
         base_url=app.base_url,
         library=LIBRARY,
-        profile=load_profile(case.capability.split(".", 1)[0]),
-        evidence_root=tmp_path,
+        profile=load_profile(product),
+        policy=load_policy(product),
+        approvals=approvals,
+        allow_irreversible=case.allow_irreversible,
+        evidence_root=tmp_path / "runs",
     )
     result = outcome.result
 
