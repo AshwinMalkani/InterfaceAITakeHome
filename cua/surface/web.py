@@ -43,6 +43,44 @@ from cua.surface.base import ActionFailed, DialogEvent, Observation, Resolved, T
 
 POLL_MS = 100
 
+# Allowlist redaction for evidence screenshots. `norm` must match cua.replay.redaction.normalize_label.
+# Every change is recorded so the page is restored exactly afterwards (a human may take over this
+# same session next).
+_REDACT_JS = """(vocabulary) => {
+  if (!document.body) return 0;
+  const allowed = new Set(vocabulary);
+  const norm = s => s.replace(/\\s+/g, ' ').trim().replace(/:$/, '').trim().toLowerCase();
+  const block = s => s.replace(/\\S/g, '\u2588');
+  const undo = [];
+  const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const tag = node.parentElement ? node.parentElement.tagName : '';
+    if (tag === 'SCRIPT' || tag === 'STYLE') continue;
+    const text = norm(node.nodeValue);
+    if (!text || allowed.has(text)) continue;
+    undo.push({node, text: node.nodeValue});
+    node.nodeValue = block(node.nodeValue);
+  }
+  for (const el of document.querySelectorAll('input, textarea')) {
+    if (!el.value || el.type === 'hidden') continue;
+    const isButton = ['submit', 'button', 'reset'].includes(el.type);
+    if (isButton && allowed.has(norm(el.value))) continue;
+    undo.push({el, value: el.value});
+    el.value = block(el.value);
+  }
+  window.__cuaRedaction = undo;
+  return undo.length;
+}"""
+
+_RESTORE_JS = """() => {
+  for (const u of (window.__cuaRedaction || []).reverse()) {
+    if (u.node) u.node.nodeValue = u.text; else u.el.value = u.value;
+  }
+  delete window.__cuaRedaction;
+}"""
+
 # An element that is fixed/absolute, visible, and covers at least half the viewport is treated as
 # a blocking overlay. Legacy modals are almost always built this way (a dimmed full-screen div).
 _BLOCKING_OVERLAY_JS = """() => {
@@ -323,16 +361,40 @@ class WebSurface:
                 observation.locations[name] = _path(frame.url)
         return observation
 
-    def screenshot(self, mask: list[Target]) -> bytes:
+    def screenshot(self, mask: list[Target], vocabulary: frozenset[str] | None) -> bytes:
         locators: list[Locator] = []
         for target in mask:
             frame = self._frame(target.frame)
             if frame is not None:
                 locators += [build_locator(frame, spec) for spec in target.strategies]
+        redacted = self.redact_text(vocabulary) if vocabulary is not None else []
         try:
             return self.page.screenshot(full_page=True, mask=locators, mask_color="#000000")
         except PlaywrightError as exc:
             raise ActionFailed(_first_line(exc)) from None
+        finally:
+            self.restore_text(redacted)
+
+    def redact_text(self, vocabulary: frozenset[str]) -> list[Frame]:
+        """Mask all non-vocabulary text in every frame; returns the frames to restore."""
+        redacted: list[Frame] = []
+        for frame in self.page.frames:
+            try:
+                frame.evaluate(_REDACT_JS, sorted(vocabulary))
+                redacted.append(frame)
+            except PlaywrightError:
+                # A frame we can't redact (e.g. mid-navigation) must not appear in clear: fail closed.
+                self.restore_text(redacted)
+                raise ActionFailed("could not redact a frame; no screenshot taken") from None
+        return redacted
+
+    @staticmethod
+    def restore_text(frames: list[Frame]) -> None:
+        for frame in frames:
+            try:
+                frame.evaluate(_RESTORE_JS)
+            except PlaywrightError:
+                continue
 
 
 def _first_line(exc: Exception) -> str:

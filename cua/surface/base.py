@@ -96,6 +96,8 @@ class Surface(Protocol):
 
     def observe(self) -> Observation: ...
 
-    def screenshot(self, mask: list[Target]) -> bytes:
-        """Full screenshot with every control matching `mask` painted over."""
+    def screenshot(self, mask: list[Target], vocabulary: frozenset[str] | None) -> bytes:
+        """Full screenshot with every control matching `mask` painted over. If `vocabulary` is given
+        (normalized labels), all other visible text and input values are masked too, and the page is
+        restored afterwards. `None` means unredacted, which only a sandbox policy may allow."""
         ...
