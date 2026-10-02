@@ -86,6 +86,10 @@ class Surface(Protocol):
         """
         ...
 
+    def take_blocked_requests(self) -> list[str]:
+        """URLs the surface refused to load because policy forbids them, since the last call."""
+        ...
+
     def take_dialogs(self) -> list[DialogEvent]:
         """Dialogs handled since the last call (expected ones answered, unexpected ones dismissed)."""
         ...

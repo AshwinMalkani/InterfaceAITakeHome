@@ -182,3 +182,14 @@ def test_observe_is_structural(surface: WebSurface) -> None:
     observation = surface.observe()
     assert "top" in observation.locations
     assert not hasattr(observation, "text")
+
+
+def test_request_filter_blocks_and_records_disallowed_navigation(browser_page: Page) -> None:
+    surface = WebSurface(browser_page, "http://unused", request_filter=lambda url: "evil.example" not in url)
+    browser_page.set_content('<a href="http://evil.example/steal">Details</a>')
+    surface.click(
+        surface.resolve(target({"kind": "role", "role": "link", "name": "Details"}), 1000), None, 1000
+    )
+    browser_page.wait_for_timeout(300)
+    assert surface.take_blocked_requests() == ["http://evil.example/steal"]
+    assert "evil.example" not in browser_page.url
