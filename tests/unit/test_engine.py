@@ -21,6 +21,7 @@ from cua.artifact.schema import (
     UrlMatches,
 )
 from cua.evidence.sink import RunEvidence
+from cua.policy import ApprovalLedger, Policy, PolicyGate
 from cua.profile import KnownState
 from cua.replay.engine import MAX_INTERSTITIALS, ReplayEngine, sensitive_targets
 from cua.replay.result import BusinessOutcome, Failure, FailureCategory, Success
@@ -43,6 +44,7 @@ class FakeSurface:
     texts: dict[str, str] = field(default_factory=lambda: {"table_cell": "$4,719.56"})
     dialogs_on_click: list[DialogEvent] = field(default_factory=list)
     blocked: bool = False
+    blocked_requests: list[str] = field(default_factory=list)
     hooks: dict[str, Hook] = field(default_factory=dict)  # action name -> called after the action
     calls: list[tuple[str, Any]] = field(default_factory=list)
     pending_dialogs: list[DialogEvent] = field(default_factory=list)
@@ -100,6 +102,10 @@ class FakeSurface:
     def blocking_overlay(self) -> str | None:
         return self.overlay
 
+    def take_blocked_requests(self) -> list[str]:
+        blocked, self.blocked_requests = self.blocked_requests, []
+        return blocked
+
     def take_dialogs(self) -> list[DialogEvent]:
         events, self.pending_dialogs = self.pending_dialogs, []
         return events
@@ -153,6 +159,7 @@ def run(
     evidence: RunEvidence | None = None,
     states: list[KnownState] | None = None,
     reauthenticate: Callable[[], bool] | None = None,
+    gate: PolicyGate | None = None,
 ) -> Any:
     engine = ReplayEngine(
         surface,
@@ -160,6 +167,7 @@ def run(
         evidence=evidence,
         states=states or [],
         reauthenticate=reauthenticate,
+        gate=gate,
         success_timeout_ms=100,
         dismiss_timeout_ms=100,
     )
@@ -461,3 +469,61 @@ def test_state_appearing_as_the_post_condition_passes_is_attributed_to_that_step
     result = run(RacingPage())
     assert isinstance(result, Failure) and result.category is FailureCategory.UNKNOWN_STATE
     assert result.step_id == "s1"
+
+
+class TestPolicyGate:
+    POLICY = Policy(
+        product="app",
+        allowed_routes=["^/"],
+        blocked_routes=["^/__"],
+        allowed_actions=["navigate", "click", "fill", "select", "press", "extract"],
+        risk={"unattended_max": "reversible", "irreversible_keywords": ["confirm"]},
+    )
+
+    def gate(self, tmp_path: Path, *, approve: Capability | None = None, allow: bool = False) -> PolicyGate:
+        ledger = ApprovalLedger(tmp_path / "approvals.json")
+        if approve is not None:
+            ledger.approve(approve, "reviewer@cu")
+        return PolicyGate(self.POLICY, base_url="http://app", approvals=ledger, allow_irreversible=allow)
+
+    def test_irreversible_step_stops_before_acting_without_approval(self, tmp_path: Path) -> None:
+        surface = FakeSurface()
+        result = run(surface, with_step(CONFIRM), gate=self.gate(tmp_path, allow=True))
+        assert isinstance(result, Failure) and result.category is FailureCategory.APPROVAL_REQUIRED
+        assert result.step_id == "s1b" and result.needs_human and not result.retryable
+        assert "not approved" in result.message
+        assert ("click", "role") not in surface.calls  # never clicked Confirm
+
+    def test_approved_but_not_allowed_still_stops(self, tmp_path: Path) -> None:
+        cap = with_step(CONFIRM)
+        result = run(FakeSurface(), cap, gate=self.gate(tmp_path, approve=cap, allow=False))
+        assert isinstance(result, Failure) and result.category is FailureCategory.APPROVAL_REQUIRED
+        assert "did not allow" in result.message
+
+    def test_approved_and_allowed_runs(self, tmp_path: Path) -> None:
+        cap = with_step(CONFIRM)
+        surface = FakeSurface()
+        assert isinstance(run(surface, cap, gate=self.gate(tmp_path, approve=cap, allow=True)), Success)
+        assert ("click", "role") in surface.calls
+
+    def test_blocked_request_is_a_policy_failure(self, tmp_path: Path) -> None:
+        surface = FakeSurface(blocked_requests=["http://evil.example/x"])
+        result = run(surface, gate=self.gate(tmp_path))
+        assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
+        assert "evil.example" in result.message and not result.retryable
+
+    def test_rendered_route_is_checked_before_navigating(self, tmp_path: Path) -> None:
+        data = copy.deepcopy(minimal())
+        data["entry_route"] = "/m/{{inputs.member_id}}"
+        surface = FakeSurface()
+        result = run(surface, Capability.model_validate(data), params={"member_id": "../__reset"},
+                     gate=self.gate(tmp_path))
+        assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
+        assert result.step_id == "entry"
+        assert not [c for c in surface.calls if c[0] == "goto"]
+
+    def test_static_violations_fail_before_touching_the_surface(self, tmp_path: Path) -> None:
+        surface = FakeSurface()
+        result = run(surface, capability(entry_route="/__faults"), gate=self.gate(tmp_path))
+        assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
+        assert result.step_id is None and surface.calls == []

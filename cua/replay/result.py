@@ -31,6 +31,8 @@ class FailureCategory(StrEnum):
     APP_ERROR = "app_error"                              # the application itself reported an error
     SESSION_EXPIRED = "session_expired"                  # session lost and could not safely be restored
     UNKNOWN_STATE = "unknown_state"                      # an undeclared state is blocking the screen
+    POLICY_DENIED = "policy_denied"                      # the action or request is outside the allowlist
+    APPROVAL_REQUIRED = "approval_required"              # an irreversible step needs approval to run
 
 
 # Whether the *condition* is plausibly transient. A failure is only reported retryable if this is
@@ -47,11 +49,15 @@ TRANSIENT: dict[FailureCategory, bool] = {
     FailureCategory.APP_ERROR: True,
     FailureCategory.SESSION_EXPIRED: False,
     FailureCategory.UNKNOWN_STATE: False,
+    FailureCategory.POLICY_DENIED: False,
+    FailureCategory.APPROVAL_REQUIRED: False,
 }
 
 # Conditions a person has to look at: unknown screens and dialogs, or a lost session after an
 # irreversible step (did it happen or not?). M5 routes these to an operator.
-NEEDS_HUMAN = frozenset({FailureCategory.UNEXPECTED_DIALOG, FailureCategory.UNKNOWN_STATE})
+NEEDS_HUMAN = frozenset(
+    {FailureCategory.UNEXPECTED_DIALOG, FailureCategory.UNKNOWN_STATE, FailureCategory.APPROVAL_REQUIRED}
+)
 
 
 class CapabilityRef(BaseModel):
