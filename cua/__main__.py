@@ -43,6 +43,8 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--param", action="append", default=[], metavar="NAME=VALUE")
     run.add_argument("--allow-irreversible", action="store_true",
                      help="permit irreversible steps in this run (the capability must also be approved)")
+    run.add_argument("--unredacted-screenshots", action="store_true",
+                     help="don't redact failure screenshots (only if the product's policy allows it)")
     run.add_argument("--evidence-dir", type=Path, default=REPO / "runs")
     run.add_argument("--request-id", help="caller's request id, for correlating logs")
     run.add_argument("--headed", action="store_true", help="show the browser")
@@ -75,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
         approvals=ApprovalLedger(args.library / "approvals.json"),
         evidence_root=args.evidence_dir,
         allow_irreversible=args.allow_irreversible,
+        unredacted_screenshots=args.unredacted_screenshots,
         request_id=args.request_id,
         headless=not args.headed,
         slow_mo_ms=args.slow_mo,

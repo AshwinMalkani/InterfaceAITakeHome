@@ -15,9 +15,10 @@ from pathlib import Path
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import attach_handler, get_logger, run_context
 from cua.evidence.sink import RunEvidence
-from cua.policy import ApprovalLedger, Policy, PolicyGate
+from cua.policy import ApprovalLedger, Policy, PolicyGate, PolicyViolation
 from cua.profile import AppProfile, StateKind
 from cua.replay.engine import ReplayEngine
+from cua.replay.redaction import profile_vocabulary
 from cua.replay.result import Result
 from cua.security.masking import SecretRegistry, use_registry
 from cua.surface.web import WebSurface
@@ -48,6 +49,7 @@ def replay(
     approvals: ApprovalLedger,
     evidence_root: Path,
     allow_irreversible: bool = False,
+    unredacted_screenshots: bool = False,
     request_id: str | None = None,
     headless: bool = True,
     slow_mo_ms: int = 0,
@@ -58,6 +60,9 @@ def replay(
     sign_on = library.get(profile.sign_on.capability) if profile.sign_on else None
     credentials = profile.sign_on_params()  # fail fast on missing config, before opening a browser
     gate = PolicyGate(policy, base_url=base_url, approvals=approvals, allow_irreversible=allow_irreversible)
+    if unredacted_screenshots and not policy.allow_unredacted_screenshots:
+        raise PolicyViolation(f"policy for {policy.product!r} does not allow unredacted screenshots")
+    ui_vocabulary, redact = profile_vocabulary(profile), not unredacted_screenshots
 
     run_id = new_run_id()
     registry = SecretRegistry()
@@ -76,6 +81,7 @@ def replay(
                 # Signing on can't itself recover from "session expired", so that state is excluded.
                 sign_on_engine = ReplayEngine(
                     surface, registry=registry, evidence=evidence, gate=gate,
+                    ui_vocabulary=ui_vocabulary, redact_screenshots=redact,
                     states=[s for s in profile.states if s.kind is not StateKind.SESSION_EXPIRED],
                 )
 
@@ -88,7 +94,8 @@ def replay(
                         result = signed_on
                 if result is None:
                     engine = ReplayEngine(surface, registry=registry, evidence=evidence, gate=gate,
-                                          states=profile.states, reauthenticate=reauthenticate)
+                                          states=profile.states, reauthenticate=reauthenticate,
+                                          ui_vocabulary=ui_vocabulary, redact_screenshots=redact)
                     result = engine.run(capability, params)
         evidence.save_json("result.json", result.model_dump(mode="json"))
         log.info("run.finished", result=result.type)

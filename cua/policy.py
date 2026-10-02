@@ -75,6 +75,8 @@ class Policy(BaseModel):
     blocked_routes: list[str] = []  # deny wins over allow
     allowed_actions: list[ActionKind]
     risk: RiskPolicy = RiskPolicy()
+    # Evidence screenshots are redacted by allowlist. Only a sandbox policy may permit turning that off.
+    allow_unredacted_screenshots: bool = False
 
     def route_allowed(self, path: str) -> bool:
         path = _normalize(path)
