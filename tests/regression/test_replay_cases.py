@@ -10,7 +10,7 @@ import pytest
 from apps.cu_core.data import MemberStore
 from cua.artifact.store import CapabilityLibrary
 from cua.profile import load_profile
-from cua.replay.result import Failure, Success
+from cua.replay.result import BusinessOutcome, Failure, Success
 from cua.runner import replay
 from cua.security.masking import safe_mask
 from tests.regression.conftest import TEST_PASSWORD, TargetApp
@@ -40,9 +40,18 @@ def test_case(case: Case, target_apps: dict[str, TargetApp], tmp_path: Path) -> 
 
     # 1. The contract: result type, and where/why it failed.
     assert result.type == case.expect.result_type, result
+    expect = case.expect
     if isinstance(result, Failure):
-        assert result.category == case.expect.category
-        assert result.step_id == case.expect.failed_step
+        assert result.category == expect.category
+        assert result.step_id == expect.failed_step
+        if expect.needs_human is not None:
+            assert result.needs_human == expect.needs_human
+        if expect.retryable is not None:
+            assert result.retryable == expect.retryable
+    if isinstance(result, BusinessOutcome):
+        assert result.outcome == expect.outcome
+    if expect.recoveries is not None:
+        assert [r.kind for r in result.recoveries] == expect.recoveries
     if case.expect.outputs is not None:
         assert isinstance(result, Success)
         assert {k: str(v) for k, v in result.outputs.items()} == {

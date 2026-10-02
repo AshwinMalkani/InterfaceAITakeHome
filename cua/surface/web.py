@@ -43,6 +43,21 @@ from cua.surface.base import ActionFailed, DialogEvent, Observation, Resolved, T
 
 POLL_MS = 100
 
+# An element that is fixed/absolute, visible, and covers at least half the viewport is treated as
+# a blocking overlay. Legacy modals are almost always built this way (a dimmed full-screen div).
+_BLOCKING_OVERLAY_JS = """() => {
+  const area = window.innerWidth * window.innerHeight;
+  if (!area) return false;
+  for (const el of document.querySelectorAll('body *')) {
+    const s = getComputedStyle(el);
+    if ((s.position !== 'fixed' && s.position !== 'absolute') || s.display === 'none'
+        || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) continue;
+    const r = el.getBoundingClientRect();
+    if (r.width * r.height >= 0.5 * area) return true;
+  }
+  return false;
+}"""
+
 # Visible cell text, ignoring a trailing/embedded ':' and whitespace differences.
 _NORM = "normalize-space(translate(., ':', ''))"
 
@@ -229,10 +244,10 @@ class WebSurface:
     def check(self, checkpoint: Checkpoint) -> bool:
         match checkpoint:
             case TextPresent(text=text, frame=frame_name):
-                frame = self._frame(frame_name)
+                frame = self._parsed_frame(frame_name)
                 return frame is not None and self._count(frame.get_by_text(text).filter(visible=True)) > 0
             case UrlMatches(pattern=pattern, frame=frame_name):
-                frame = self._frame(frame_name)
+                frame = self._parsed_frame(frame_name)
                 return frame is not None and re.search(pattern, _path(frame.url)) is not None
             case ElementVisible(target=target):
                 return self._find_unique(target, [0] * len(target.strategies)) is not None
@@ -241,6 +256,26 @@ class WebSurface:
             case AnyOf(conditions=conditions):
                 return any(self.check(c) for c in conditions)
         raise AssertionError(f"unhandled checkpoint {checkpoint!r}")
+
+    def _parsed_frame(self, name: str | None) -> Frame | None:
+        """The frame, only once its document is fully parsed. A half-parsed page can show the
+        expected text while a modal further down the HTML doesn't exist yet."""
+        frame = self._frame(name)
+        if frame is None:
+            return None
+        try:
+            return frame if frame.evaluate("document.readyState") != "loading" else None
+        except PlaywrightError:  # navigating
+            return None
+
+    def blocking_overlay(self) -> str | None:
+        for frame in self.page.frames:
+            try:
+                if frame.evaluate(_BLOCKING_OVERLAY_JS):
+                    return "top" if frame is self.page.main_frame else frame.name
+            except PlaywrightError:  # frame navigating; it will be checked again next poll
+                continue
+        return None
 
     @staticmethod
     def _count(locator: Locator) -> int:
@@ -263,7 +298,10 @@ class WebSurface:
             frame = self._frame(target.frame)
             if frame is not None:
                 locators += [build_locator(frame, spec) for spec in target.strategies]
-        return self.page.screenshot(full_page=True, mask=locators, mask_color="#000000")
+        try:
+            return self.page.screenshot(full_page=True, mask=locators, mask_color="#000000")
+        except PlaywrightError as exc:
+            raise ActionFailed(_first_line(exc)) from None
 
 
 def _first_line(exc: Exception) -> str:

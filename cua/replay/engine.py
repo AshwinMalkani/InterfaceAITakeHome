@@ -1,17 +1,30 @@
 """Deterministic replay: run a capability's steps with no LLM in the loop.
 
-For each step: resolve the target (first unique strategy wins; a fallback is a drift warning),
-act, check that no undeclared dialog appeared, then wait for the step's post-condition. The
-first thing that goes wrong stops the run with a Failure naming the step, what was expected,
-and what was observed, plus a screenshot with sensitive controls masked.
+Per step: scan for known/unknown states, resolve the target (first unique strategy wins; a
+fallback is a drift warning), act, reject undeclared dialogs, then wait for the post-condition.
 
-Waiting is always on state (post-conditions polled via the surface), never fixed sleeps.
+Every poll of every wait is a race, checked in this order:
+  1. dialogs          an undeclared native dialog fails the step (it was dismissed, never accepted)
+  2. known states     from the app profile, handled by kind:
+                        interstitial     -> click its safe dismiss control, keep waiting (bounded)
+                        session_expired  -> sign on again and restart, only if nothing irreversible ran
+                        app_error        -> hard failure
+                        business         -> business outcome shared by all capabilities
+  3. unknown overlay  something undeclared covers the screen -> failure that needs a human
+  4. outcomes         the capability's declared business outcomes (active from `after_step` on)
+  5. post-condition   only now can the step succeed
+States are checked *before* the post-condition on purpose: the expected text can be present
+underneath a blocking modal, and "success" must never be reported through one.
+
+Retries: a step is retried once after a post-condition timeout only if its risk is `safe`.
+Irreversible steps are never retried or restarted: repeating "Confirm" on a legacy app with no
+idempotency token opens a second account.
 """
 
 from __future__ import annotations
 
 import time
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -26,18 +39,23 @@ from cua.artifact.schema import (
     Fill,
     Navigate,
     Press,
+    Risk,
     Select,
     Step,
     Target,
 )
 from cua.evidence.log import get_logger, log_context, span
 from cua.evidence.sink import RunEvidence
+from cua.profile import KnownState, StateKind
 from cua.replay.describe import describe_checkpoint, describe_locator, describe_target
 from cua.replay.result import (
-    RETRYABLE,
+    NEEDS_HUMAN,
+    TRANSIENT,
+    BusinessOutcome,
     CapabilityRef,
     Failure,
     FailureCategory,
+    Recovery,
     ReplayWarning,
     Result,
     Success,
@@ -49,17 +67,40 @@ log = get_logger(__name__)
 
 POLL_MS = 100
 SUCCESS_TIMEOUT_MS = 10_000
+DISMISS_TIMEOUT_MS = 5_000
+MAX_INTERSTITIALS = 3  # per invocation; more means we're looping, not recovering
+MAX_RESTARTS = 1  # session restarts per invocation
 
 
 class StepFailure(Exception):
     def __init__(
-        self, category: FailureCategory, step_id: str, message: str, expected: str | None = None
+        self,
+        category: FailureCategory,
+        step_id: str,
+        message: str,
+        expected: str | None = None,
+        needs_human: bool = False,
     ) -> None:
         super().__init__(message)
         self.category = category
         self.step_id = step_id
         self.message = message
         self.expected = expected
+        self.needs_human = needs_human or category in NEEDS_HUMAN
+
+
+class _OutcomeReached(Exception):
+    def __init__(self, name: str, description: str, step_id: str) -> None:
+        super().__init__(name)
+        self.name = name
+        self.description = description
+        self.step_id = step_id
+
+
+class _SessionLost(Exception):
+    def __init__(self, step_id: str) -> None:
+        super().__init__("session lost")
+        self.step_id = step_id
 
 
 @dataclass
@@ -69,10 +110,18 @@ class _RunState:
     started: float = field(default_factory=time.monotonic)
     outputs: dict[str, Any] = field(default_factory=dict)
     warnings: list[ReplayWarning] = field(default_factory=list)
+    recoveries: list[Recovery] = field(default_factory=list)
+    step_index: int = -1  # -1 = entry; len(steps) = final success check
+    irreversible_started: bool = False  # set *before* acting: if it may have happened, assume it did
+    interstitials: int = 0
 
     @property
     def duration_ms(self) -> int:
         return int((time.monotonic() - self.started) * 1000)
+
+    def restart(self) -> None:
+        self.outputs.clear()
+        self.step_index = -1
 
 
 def sensitive_targets(capability: Capability) -> list[Target]:
@@ -100,12 +149,18 @@ class ReplayEngine:
         *,
         registry: SecretRegistry,
         evidence: RunEvidence | None = None,
+        states: Sequence[KnownState] = (),
+        reauthenticate: Callable[[], bool] | None = None,
         success_timeout_ms: int = SUCCESS_TIMEOUT_MS,
+        dismiss_timeout_ms: int = DISMISS_TIMEOUT_MS,
     ) -> None:
         self.surface = surface
         self.registry = registry
         self.evidence = evidence
+        self.states = list(states)
+        self.reauthenticate = reauthenticate
         self.success_timeout_ms = success_timeout_ms
+        self.dismiss_timeout_ms = dismiss_timeout_ms
 
     @staticmethod
     def check_inputs(capability: Capability, params: Mapping[str, object]) -> Failure | None:
@@ -120,9 +175,13 @@ class ReplayEngine:
     def run(self, capability: Capability, params: Mapping[str, object]) -> Result:
         with log_context(capability_id=capability.id, capability_version=capability.version):
             result = self._run(capability, params)
-            log.info("capability.finished", result=result.type, duration_ms=result.duration_ms,
-                     **({"category": result.category, "step_id": result.step_id}
-                        if isinstance(result, Failure) else {}))
+            details: dict[str, Any] = {}
+            if isinstance(result, Failure):
+                details = {"category": result.category, "step_id": result.step_id,
+                           "needs_human": result.needs_human}
+            elif isinstance(result, BusinessOutcome):
+                details = {"outcome": result.outcome, "step_id": result.step_id}
+            log.info("capability.finished", result=result.type, duration_ms=result.duration_ms, **details)
             return result
 
     def _run(self, capability: Capability, params: Mapping[str, object]) -> Result:
@@ -135,28 +194,83 @@ class ReplayEngine:
             self.registry.register(spec.name, values[spec.name], spec.sensitivity)
 
         state = _RunState(capability, values, started=started)
-        try:
-            with span(step_id="entry"):
-                self._goto(render(capability.entry_route, values), "entry")
-            for step in capability.steps:
-                with span(step_id=step.id):
-                    self._run_step(step, state)
-            with span(step_id="success"):
-                self._await(capability.success, self.success_timeout_ms, "success")
-        except StepFailure as failure:
-            return self._fail(state, failure)
-        return Success(capability=_ref(capability), outputs=state.outputs, warnings=state.warnings,
-                       duration_ms=state.duration_ms)
+        restarts = 0
+        while True:
+            try:
+                self._execute(state)
+            except _OutcomeReached as outcome:
+                log.info("outcome.detected", outcome=outcome.name, step_id=outcome.step_id)
+                return BusinessOutcome(capability=_ref(capability), outcome=outcome.name,
+                                       description=outcome.description, step_id=outcome.step_id,
+                                       warnings=state.warnings, recoveries=state.recoveries,
+                                       duration_ms=state.duration_ms)
+            except _SessionLost as lost:
+                if (failure := self._restore_session(state, lost, restarts)) is not None:
+                    return self._fail(state, failure)
+                restarts += 1
+                continue
+            except StepFailure as failure:
+                return self._fail(state, failure)
+            return Success(capability=_ref(capability), outputs=state.outputs, warnings=state.warnings,
+                           recoveries=state.recoveries, duration_ms=state.duration_ms)
+
+    def _execute(self, state: _RunState) -> None:
+        capability = state.capability
+        with span(step_id="entry"):
+            self._goto(render(capability.entry_route, state.values), "entry")
+        for index, step in enumerate(capability.steps):
+            state.step_index = index
+            with span(step_id=step.id):
+                self._run_step(step, state)
+        state.step_index = len(capability.steps)
+        with span(step_id="success"):
+            self._await(capability.success, self.success_timeout_ms, "success", state)
+
+    def _restore_session(self, state: _RunState, lost: _SessionLost, restarts: int) -> StepFailure | None:
+        """Sign on again and restart from the entry route, if (and only if) that is safe."""
+        log.warning("state.detected", state="session_expired", step_id=lost.step_id)
+        if state.irreversible_started:
+            return StepFailure(FailureCategory.SESSION_EXPIRED, lost.step_id,
+                               "session expired after an irreversible step started; its effect is unknown",
+                               needs_human=True)
+        if self.reauthenticate is None or restarts >= MAX_RESTARTS:
+            return StepFailure(FailureCategory.SESSION_EXPIRED, lost.step_id,
+                               "session expired and could not be restored")
+        if not self.reauthenticate():
+            return StepFailure(FailureCategory.SESSION_EXPIRED, lost.step_id, "re-authentication failed")
+        state.recoveries.append(Recovery(kind="reauthenticated", step_id=lost.step_id,
+                                         detail="signed on again and restarted from the entry route"))
+        log.info("recovery.applied", kind="reauthenticated", step_id=lost.step_id)
+        state.restart()
+        return None
 
     # --- steps ----------------------------------------------------------------------------
 
     def _run_step(self, step: Step, state: _RunState) -> None:
         started = time.monotonic()
-        action = step.action
-        log.info("step.started", intent=step.intent, action=action.kind, risk=step.risk)
+        log.info("step.started", intent=step.intent, action=step.action.kind, risk=step.risk)
+        self._scan(step.id, state)  # never act on a screen that is in a known or blocking state
+        resolved = self._act(step, state)
+        if step.expect is not None:
+            try:
+                self._await(step.expect, step.timeout_ms, step.id, state)
+            except StepFailure as failure:
+                if failure.category is not FailureCategory.CHECKPOINT_FAILED or step.risk is not Risk.SAFE:
+                    raise
+                state.recoveries.append(Recovery(kind="retried_step", step_id=step.id,
+                                                 detail="post-condition timed out; safe step retried once"))
+                log.warning("recovery.applied", kind="retried_step")
+                resolved = self._act(step, state)
+                self._await(step.expect, step.timeout_ms, step.id, state)
+        log.info("step.succeeded", duration_ms=int((time.monotonic() - started) * 1000),
+                 strategy=resolved.strategy_kind if resolved else None)
 
+    def _act(self, step: Step, state: _RunState) -> Resolved | None:
+        action = step.action
         target = getattr(action, "target", None)
         resolved = self._resolve(step, target, state) if target is not None else None
+        if step.risk is Risk.IRREVERSIBLE:
+            state.irreversible_started = True
         try:
             match action:
                 case Navigate(route=route):
@@ -179,17 +293,14 @@ class ReplayEngine:
             assert target is not None
             raise StepFailure(FailureCategory.ACTION_FAILED, step.id, f"{action.kind} failed: {exc}",
                               expected=f"{action.kind} on {describe_target(target)}") from None
-
         self._check_dialogs(step.id, expected=action.dialog if isinstance(action, Click) else None)
-        if step.expect is not None:
-            self._await(step.expect, step.timeout_ms, step.id)
-        log.info("step.succeeded", duration_ms=int((time.monotonic() - started) * 1000),
-                 strategy=resolved.strategy_kind if resolved else None)
+        return resolved
 
     def _resolve(self, step: Step, target: Target, state: _RunState) -> Resolved:
         try:
             resolved = self.surface.resolve(target, step.timeout_ms)
         except TargetNotFound as exc:
+            self._scan(step.id, state)  # a known state (e.g. expired session) explains it better
             tried = "; ".join(
                 f"{describe_locator(spec)}: {'ambiguous, ' if n > 1 else ''}{n} match{'es' if n != 1 else ''}"
                 for spec, n in zip(target.strategies, exc.match_counts, strict=True)
@@ -223,6 +334,77 @@ class ReplayEngine:
             raise StepFailure(FailureCategory.NAVIGATION_FAILED, step_id, f"navigation failed: {exc}",
                               expected=f"page {route!r} loads") from None
 
+    # --- waiting and state detection ------------------------------------------------------
+
+    def _await(self, checkpoint: Checkpoint, timeout_ms: int, step_id: str, state: _RunState) -> None:
+        deadline = time.monotonic() + timeout_ms / 1000
+        while True:
+            self._scan(step_id, state)
+            if self.surface.check(checkpoint):
+                # Re-scan before accepting: the page may have changed between the scan above and the
+                # check, and states must be judged on a page at least as new as the one that passed.
+                self._scan(step_id, state)
+                return
+            if time.monotonic() >= deadline:
+                raise StepFailure(FailureCategory.CHECKPOINT_FAILED, step_id,
+                                  f"not reached within {timeout_ms} ms",
+                                  expected=describe_checkpoint(checkpoint))
+            self.surface.idle(POLL_MS)
+
+    def _scan(self, step_id: str, state: _RunState) -> None:
+        """Steps 1-4 of the race (see module docstring). Returns normally if nothing is in the way."""
+        self._check_dialogs(step_id)
+        for known in self.states:
+            if not self.surface.check(known.when):
+                continue
+            log.info("state.detected", state=known.name, kind=known.kind)
+            match known.kind:
+                case StateKind.INTERSTITIAL:
+                    self._dismiss(known, step_id, state)
+                    return  # the page changed; the caller's next poll re-scans
+                case StateKind.SESSION_EXPIRED:
+                    raise _SessionLost(step_id)
+                case StateKind.APP_ERROR:
+                    raise StepFailure(FailureCategory.APP_ERROR, step_id,
+                                      f"application reported an error ({known.name}): {known.description}")
+                case StateKind.BUSINESS:
+                    raise _OutcomeReached(known.name, known.description, step_id)
+        if (frame := self.surface.blocking_overlay()) is not None:
+            raise StepFailure(FailureCategory.UNKNOWN_STATE, step_id,
+                              f"an undeclared overlay is blocking frame {frame!r}; not proceeding")
+        for outcome in state.capability.outcomes:
+            after = outcome.after_step
+            active = after is None or state.step_index >= self._step_index(state, after)
+            if active and self.surface.check(outcome.when):
+                raise _OutcomeReached(outcome.name, outcome.description, step_id)
+
+    @staticmethod
+    def _step_index(state: _RunState, step_id: str) -> int:
+        return next(i for i, s in enumerate(state.capability.steps) if s.id == step_id)
+
+    def _dismiss(self, known: KnownState, step_id: str, state: _RunState) -> None:
+        state.interstitials += 1
+        if state.interstitials > MAX_INTERSTITIALS:
+            raise StepFailure(FailureCategory.UNKNOWN_STATE, step_id,
+                              f"interstitial {known.name!r} keeps reappearing; not looping", needs_human=True)
+        assert known.dismiss is not None  # guaranteed by KnownState validation
+        cannot_dismiss = StepFailure(FailureCategory.UNKNOWN_STATE, step_id,
+                                     f"known interstitial {known.name!r} could not be dismissed",
+                                     needs_human=True)
+        try:
+            resolved = self.surface.resolve(known.dismiss, self.dismiss_timeout_ms)
+            self.surface.click(resolved, None, self.dismiss_timeout_ms)
+        except (TargetNotFound, ActionFailed):
+            raise cannot_dismiss from None
+        self._check_dialogs(step_id)
+        deadline = time.monotonic() + self.dismiss_timeout_ms / 1000
+        while self.surface.check(known.when):
+            if time.monotonic() >= deadline:
+                raise cannot_dismiss
+            self.surface.idle(POLL_MS)
+        state.recoveries.append(Recovery(kind="dismissed_interstitial", step_id=step_id, detail=known.name))
+        log.info("recovery.applied", kind="dismissed_interstitial", state=known.name)
+
     def _check_dialogs(self, step_id: str, expected: DialogExpectation | None = None) -> None:
         events = self.surface.take_dialogs()
         for event in events:
@@ -236,16 +418,6 @@ class ReplayEngine:
                               "the declared confirmation dialog did not appear",
                               expected=f"dialog containing {expected.message_contains!r}")
 
-    def _await(self, checkpoint: Checkpoint, timeout_ms: int, step_id: str) -> None:
-        deadline = time.monotonic() + timeout_ms / 1000
-        while not self.surface.check(checkpoint):
-            self._check_dialogs(step_id)
-            if time.monotonic() >= deadline:
-                raise StepFailure(FailureCategory.CHECKPOINT_FAILED, step_id,
-                                  f"not reached within {timeout_ms} ms",
-                                  expected=describe_checkpoint(checkpoint))
-            self.surface.idle(POLL_MS)
-
     # --- failure evidence -----------------------------------------------------------------
 
     def _fail(self, state: _RunState, failure: StepFailure) -> Failure:
@@ -253,10 +425,13 @@ class ReplayEngine:
         evidence: list[str] = []
         if self.evidence is not None:
             name = f"{state.capability.id}.{failure.step_id}.failure.png"
-            shot = self.surface.screenshot(mask=sensitive_targets(state.capability))
-            evidence.append(self.evidence.save_image(name, shot).name)
+            try:
+                shot = self.surface.screenshot(mask=sensitive_targets(state.capability))
+                evidence.append(self.evidence.save_image(name, shot).name)
+            except ActionFailed:  # never let evidence capture hide the real failure
+                log.warning("evidence.screenshot_failed", step_id=failure.step_id)
         log.error("step.failed", category=failure.category, message=failure.message,
-                  expected=failure.expected, observed=observed.locations)
+                  expected=failure.expected, observed=observed.locations, needs_human=failure.needs_human)
         return Failure(
             capability=_ref(state.capability),
             category=failure.category,
@@ -264,8 +439,10 @@ class ReplayEngine:
             message=failure.message,
             expected=failure.expected,
             observed={"title": observed.title, "locations": observed.locations},
-            retryable=RETRYABLE[failure.category],
+            retryable=TRANSIENT[failure.category] and not state.irreversible_started,
+            needs_human=failure.needs_human,
             evidence=evidence,
             warnings=state.warnings,
+            recoveries=state.recoveries,
             duration_ms=state.duration_ms,
         )

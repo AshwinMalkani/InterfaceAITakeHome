@@ -46,3 +46,77 @@ cases:
       result_type: failure
       category: target_not_found
       failed_step: s5
+
+  # --- runtime conditions (M2): one case per row of the error taxonomy ----------------------
+
+  - name: balance_member_not_found
+    description: Unknown member is a declared business outcome, not a failure
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "99999"}
+    expect:
+      result_type: business_outcome
+      outcome: member_not_found
+
+  - name: balance_access_denied
+    description: Restricted (employee) member hits the app-wide access_denied business state from the profile
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10007"}
+    expect:
+      result_type: business_outcome
+      outcome: access_denied
+
+  - name: balance_maintenance_notice
+    description: Known interstitial before the search page is acknowledged and the run continues
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10001"}
+    faults: [{kind: interstitial, path: /member/search}]
+    expect:
+      result_type: success
+      outputs: {member_name: Avery Testwood, savings_balance: "4719.56"}
+      recoveries: [dismissed_interstitial]
+
+  - name: balance_session_expired
+    description: Session expires mid-flow before anything irreversible; replay signs on again and restarts
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10001"}
+    faults: [{kind: expire_session, path: /member/search}]
+    expect:
+      result_type: success
+      outputs: {member_name: Avery Testwood, savings_balance: "4719.56"}
+      recoveries: [reauthenticated]
+
+  - name: balance_slow_load
+    description: A slow detail page (2 s) is simply waited for; waiting is on state, not sleeps
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10001"}
+    faults: [{kind: slow, path: /member/detail, delay_ms: 2000}]
+    expect:
+      result_type: success
+      outputs: {member_name: Avery Testwood, savings_balance: "4719.56"}
+      recoveries: []
+
+  - name: balance_app_error
+    description: Server error page is a hard failure at the step that caused it; retryable (all steps safe)
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10001"}
+    faults: [{kind: server_error, path: /member/detail}]
+    expect:
+      result_type: failure
+      category: app_error
+      failed_step: s3
+      retryable: true
+      needs_human: false
+
+  - name: balance_compliance_hold
+    description: >
+      Undeclared blocking modal over the detail page. Regression for the M1b finding: replay used to
+      report success because the expected text was still visible under the overlay.
+    capability: cu_core.member.get_share_balance
+    params: {member_id: "10001"}
+    faults: [{kind: compliance_hold, path: /member/detail}]
+    expect:
+      result_type: failure
+      category: unknown_state
+      failed_step: s3
+      needs_human: true
+      retryable: false

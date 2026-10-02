@@ -9,7 +9,13 @@
     "member_name": "[PII:member_name]",
     "savings_balance": "[PII:savings_balance]"
   },
-  "recoveries": [],
+  "recoveries": [
+    {
+      "detail": "signed on again and restarted from the entry route",
+      "kind": "reauthenticated",
+      "step_id": "s1"
+    }
+  ],
   "type": "success",
   "warnings": []
 }

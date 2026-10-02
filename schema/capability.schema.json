@@ -368,6 +368,70 @@
       "title": "NearTextLocator",
       "type": "object"
     },
+    "OutcomeSpec": {
+      "additionalProperties": false,
+      "description": "A legitimate, expected result other than success, e.g. \"no such member\".\n\nPart of the contract, like a typed error in a function signature: the calling agent can see\nevery outcome it may get back. When `when` becomes true, replay stops and returns this outcome\n(not a failure). `after_step` limits detection to that step and later, so an early page can't\ntrigger an outcome meant for a later one.",
+      "properties": {
+        "after_step": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "After Step"
+        },
+        "description": {
+          "title": "Description",
+          "type": "string"
+        },
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "title": "Name",
+          "type": "string"
+        },
+        "when": {
+          "discriminator": {
+            "mapping": {
+              "all_of": "#/$defs/AllOf",
+              "any_of": "#/$defs/AnyOf",
+              "element_visible": "#/$defs/ElementVisible",
+              "text_present": "#/$defs/TextPresent",
+              "url_matches": "#/$defs/UrlMatches"
+            },
+            "propertyName": "kind"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/$defs/TextPresent"
+            },
+            {
+              "$ref": "#/$defs/ElementVisible"
+            },
+            {
+              "$ref": "#/$defs/UrlMatches"
+            },
+            {
+              "$ref": "#/$defs/AllOf"
+            },
+            {
+              "$ref": "#/$defs/AnyOf"
+            }
+          ],
+          "title": "When"
+        }
+      },
+      "required": [
+        "name",
+        "description",
+        "when"
+      ],
+      "title": "OutcomeSpec",
+      "type": "object"
+    },
     "OutputSpec": {
       "additionalProperties": false,
       "properties": {
@@ -927,6 +991,14 @@
       "title": "Inputs",
       "type": "array"
     },
+    "outcomes": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/OutcomeSpec"
+      },
+      "title": "Outcomes",
+      "type": "array"
+    },
     "outputs": {
       "default": [],
       "items": {
@@ -939,7 +1011,10 @@
       "$ref": "#/$defs/Provenance"
     },
     "schema_version": {
-      "const": "1.0",
+      "enum": [
+        "1.0",
+        "1.1"
+      ],
       "title": "Schema Version",
       "type": "string"
     },

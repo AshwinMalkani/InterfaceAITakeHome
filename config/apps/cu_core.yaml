@@ -1,5 +1,4 @@
 # App profile: facts about the vendor product that are shared by every capability and tenant.
-# (M2 adds known states here: session-expired page, error banner, maintenance notice, ...)
 product: cu_core
 
 # Every cu_core capability runs in a signed-on session. Credentials are read from these
@@ -9,3 +8,34 @@ sign_on:
   credentials:
     username: CU_CORE_USERNAME
     password: CU_CORE_PASSWORD
+
+# Known runtime states. Replay checks for these on every poll, before accepting a step's
+# post-condition, so a state that appears on top of the expected page is never missed.
+states:
+  - name: maintenance_notice
+    kind: interstitial
+    description: Scheduled-maintenance notice shown before a page; acknowledging it continues to the page
+    when: {kind: text_present, text: SYSTEM NOTICE, frame: main}
+    dismiss:
+      frame: main
+      strategies:
+        - {kind: role, role: button, name: Acknowledge}
+
+  - name: session_expired
+    kind: session_expired
+    description: Idle timeout; the sign-on page replaces the content frame (or the whole window)
+    when:
+      kind: any_of
+      conditions:
+        - {kind: text_present, text: Your session has expired, frame: main}
+        - {kind: text_present, text: Your session has expired}
+
+  - name: application_error
+    kind: app_error
+    description: Unhandled server error page with a reference number
+    when: {kind: text_present, text: APPLICATION ERROR, frame: main}
+
+  - name: access_denied
+    kind: business
+    description: The operator lacks privileges for this record (e.g. employee accounts)
+    when: {kind: text_present, text: "ERR 0403", frame: main}

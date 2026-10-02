@@ -37,6 +37,9 @@ class Expectation(BaseModel):
     category: str | None = None  # failure category, when result_type == failure
     failed_step: str | None = None
     outputs: dict[str, Any] | None = None
+    recoveries: list[str] | None = None  # recovery kinds, in order
+    needs_human: bool | None = None
+    retryable: bool | None = None
 
 
 class Case(BaseModel):
