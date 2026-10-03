@@ -10,6 +10,7 @@
     "cu_core.member.get_share_balance.s3.failure.png"
   ],
   "expected": null,
+  "interventions": [],
   "message": "an undeclared overlay is blocking frame 'main'; not proceeding",
   "needs_human": true,
   "observed": {

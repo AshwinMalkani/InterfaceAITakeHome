@@ -10,6 +10,7 @@
     "cu_core.member.open_sub_account.s10.failure.png"
   ],
   "expected": null,
+  "interventions": [],
   "message": "stopped before irreversible step 'Confirm and open the account': capability's current content is not approved",
   "needs_human": true,
   "observed": {

@@ -10,6 +10,7 @@
     "cu_core.member.get_share_balance.s5.failure.png"
   ],
   "expected": "'Balance' cell of the 'Share Savings' row in frame 'main'",
+  "interventions": [],
   "message": "no unique match ('Balance' cell of the 'Share Savings' row: 0 matches)",
   "needs_human": false,
   "observed": {

@@ -15,12 +15,15 @@ from pathlib import Path
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import attach_handler, get_logger, run_context
 from cua.evidence.sink import RunEvidence
+from cua.hitl.handoff import GuardedSurface, LiveHandoff
+from cua.hitl.store import HitlStore
 from cua.policy import ApprovalLedger, Policy, PolicyGate, PolicyViolation
 from cua.profile import AppProfile, StateKind
 from cua.replay.engine import ReplayEngine
 from cua.replay.redaction import profile_vocabulary
 from cua.replay.result import Result
 from cua.security.masking import SecretRegistry, use_registry
+from cua.surface.base import Surface
 from cua.surface.web import WebSurface
 
 log = get_logger(__name__)
@@ -53,7 +56,12 @@ def replay(
     request_id: str | None = None,
     headless: bool = True,
     slow_mo_ms: int = 0,
+    hitl: HitlStore | None = None,
+    cdp_port: int | None = None,
+    unclaimed_timeout_s: float = 900,
 ) -> RunOutcome:
+    """Replay one capability. With `hitl`, failures a person can resolve pause the run on the same live
+    session and wait for an operator (see cua/hitl); without it, they are returned as failures."""
     capability = library.get(capability_id)
     if capability.app.product != profile.product:
         raise ValueError(f"{capability_id} targets {capability.app.product!r}, not {profile.product!r}")
@@ -77,7 +85,18 @@ def replay(
         result: Result | None = ReplayEngine.preflight(capability, params, gate)
         if result is None:
             with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms,
-                                   request_filter=gate.allows_request) as surface:
+                                   request_filter=gate.allows_request, cdp_port=cdp_port) as surface:
+                acting: Surface = surface
+                handoff: LiveHandoff | None = None
+                if hitl is not None:
+                    hitl.registry = registry  # anything written to the store is masked with this run's values
+                    hitl.open_session(run_id)
+                    acting = GuardedSurface(surface, hitl, run_id)
+                    live = "the open browser window"
+                    if cdp_port:
+                        live = f"CDP endpoint http://127.0.0.1:{cdp_port}"
+                    handoff = LiveHandoff(hitl, session_id=run_id, run_id=run_id, surface=surface,
+                                          live_session=live, unclaimed_timeout_s=unclaimed_timeout_s)
                 # Signing on can't itself recover from "session expired", so that state is excluded.
                 sign_on_engine = ReplayEngine(
                     surface, registry=registry, evidence=evidence, gate=gate,
@@ -93,9 +112,10 @@ def replay(
                     if signed_on.type != "success":
                         result = signed_on
                 if result is None:
-                    engine = ReplayEngine(surface, registry=registry, evidence=evidence, gate=gate,
+                    engine = ReplayEngine(acting, registry=registry, evidence=evidence, gate=gate,
                                           states=profile.states, reauthenticate=reauthenticate,
-                                          ui_vocabulary=ui_vocabulary, redact_screenshots=redact)
+                                          escalation=handoff, ui_vocabulary=ui_vocabulary,
+                                          redact_screenshots=redact)
                     result = engine.run(capability, params)
         evidence.save_json("result.json", result.model_dump(mode="json"))
         log.info("run.finished", result=result.type)

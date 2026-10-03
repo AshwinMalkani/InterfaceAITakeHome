@@ -6,6 +6,7 @@
   },
   "description": "Share savings can't cover the opening deposit",
   "duration_ms": "<normalized>",
+  "interventions": [],
   "outcome": "insufficient_funds",
   "recoveries": [],
   "step_id": "s9",

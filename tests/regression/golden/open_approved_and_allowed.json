@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "duration_ms": "<normalized>",
+  "interventions": [],
   "outputs": {
     "confirmation_number": "C-004501",
     "new_suffix": "20"
