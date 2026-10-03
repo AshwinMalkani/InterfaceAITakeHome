@@ -55,3 +55,21 @@ def test_unredacted_screenshots_need_a_policy_that_allows_them(
             evidence_root=tmp_path,
             unredacted_screenshots=True,
         )
+
+
+def test_redact_observation_keeps_vocabulary_and_masks_values() -> None:
+    from cua.replay.redaction import redact_observation
+
+    screen = "\n".join(
+        [
+            "[frame main  /core/member/detail]",
+            '  e12   cell "Phone:"',
+            '  e13   cell "555-0117"',
+            "  e14   textbox (next to 'Member Number')",
+            "  e15   select options=['Savings', 'Acct 12345678']",
+        ]
+    )
+    out = redact_observation(screen, frozenset({"phone", "savings"}))
+    assert '"Phone:"' in out and "555-0117" not in out
+    assert "(next to 'Member Number')" in out  # structure stays readable
+    assert "'Savings'" in out and "12345678" not in out
