@@ -40,6 +40,7 @@ from cua.artifact.schema import (
 )
 from cua.artifact.schema import Locator as LocatorSpec
 from cua.surface.base import ActionFailed, DialogEvent, Observation, Resolved, TargetNotFound
+from cua.surface.snapshot import Element, Snapshot
 
 POLL_MS = 100
 
@@ -72,6 +73,91 @@ _REDACT_JS = """(vocabulary) => {
   }
   window.__cuaRedaction = undo;
   return undo.length;
+}"""
+
+# Discovery snapshot. Tags each listed element with data-cua-ref (replacing old tags) so a ref can be
+# acted on and so candidate locators can be checked against "the same element". Refs never end up in
+# an artifact: the compiler only emits role/label/near_text/field_value/table_cell/name-attribute css.
+_SNAPSHOT_JS = """([start, maxElements]) => {
+  if (!document.body) return [];
+  document.querySelectorAll('[data-cua-ref]').forEach(e => e.removeAttribute('data-cua-ref'));
+  const norm = s => (s || '').replace(/\\s+/g, ' ').trim();
+  const labelish = s => /[A-Za-z]/.test(s);
+  const visible = el => {
+    const r = el.getBoundingClientRect(), s = getComputedStyle(el);
+    return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none';
+  };
+  const CONTROLS = 'input,select,textarea,button,a[href]';
+  const roleOf = el => {
+    const tag = el.tagName.toLowerCase(), type = (el.getAttribute('type') || 'text').toLowerCase();
+    if (tag === 'a') return 'link';
+    const buttonTypes = ['submit', 'button', 'reset', 'image'];
+    if (tag === 'button' || (tag === 'input' && buttonTypes.includes(type))) return 'button';
+    if (tag === 'input' && type === 'password') return 'password';
+    if (tag === 'input' && type === 'checkbox') return 'checkbox';
+    if (tag === 'input' || tag === 'textarea') return 'textbox';
+    if (tag === 'select') return 'select';
+    if (tag === 'td' || tag === 'th') return 'cell';
+    return 'text';
+  };
+  const labelFor = el => {
+    if (el.getAttribute('aria-label')) return norm(el.getAttribute('aria-label'));
+    if (el.id) {
+      const l = document.querySelector('label[for="' + CSS.escape(el.id) + '"]');
+      if (l) return norm(l.textContent);
+    }
+    const wrap = el.closest('label');
+    return wrap ? norm(wrap.textContent) : '';
+  };
+  const nameOf = (el, role) => {
+    if (role === 'button' && el.tagName === 'INPUT') return norm(el.value);
+    if (role === 'link' || role === 'button') return norm(el.textContent);
+    return labelFor(el);
+  };
+  const cellText = c => norm(c.textContent).replace(/:$/, '').trim();
+  const isLabelCell = c => labelish(cellText(c)) && !c.querySelector(CONTROLS);
+  const context = el => {
+    const cell = el.closest('td,th'), row = el.closest('tr');
+    if (!cell || !row) return {};
+    const cells = [...row.children].filter(c => c.matches('td,th'));
+    const i = cells.indexOf(cell);
+    const left = cells.slice(0, i).reverse().find(isLabelCell);
+    const key = cells.find(c => c !== cell && isLabelCell(c));
+    // The first row is a header only if every cell in it reads like a label. Otherwise (e.g.
+    // "Member Number: | 10001") its cells are data and must never become column names.
+    const table = row.closest('table'), first = table && table.rows[0];
+    const isHeaderRow = first && first !== row && [...first.cells].every(isLabelCell);
+    const header = isHeaderRow ? first.cells[cell.cellIndex] : null;
+    return {
+      left_label: left ? cellText(left) : '',
+      prev_cell: i > 0 ? cellText(cells[i - 1]) : '',
+      row_key: key ? cellText(key) : '',
+      column_header: header ? cellText(header) : '',
+    };
+  };
+  const out = [];
+  for (const el of document.body.querySelectorAll('*')) {
+    if (out.length >= maxElements) break;
+    if (!visible(el)) continue;
+    const role = roleOf(el);
+    const isControl = el.matches(CONTROLS) && !(el.tagName === 'INPUT' && el.type === 'hidden');
+    const ownText = norm([...el.childNodes].filter(n => n.nodeType === 3).map(n => n.nodeValue).join(' '));
+    const isCell = role === 'cell' && norm(el.textContent) && !el.querySelector(CONTROLS);
+    const isText = role === 'text' && ownText && !el.closest('td,th,a,button,label,option,select');
+    if (!isControl && !isCell && !isText) continue;
+    const ref = 'e' + (start + out.length);
+    el.setAttribute('data-cua-ref', ref);
+    out.push({
+      ref, role, tag: el.tagName.toLowerCase(),
+      name: isControl ? nameOf(el, role) : '',
+      label: isControl ? labelFor(el) : '',
+      text: isControl ? '' : (isCell ? norm(el.textContent) : ownText).slice(0, 160),
+      name_attr: el.getAttribute('name') || '',
+      options: role === 'select' ? [...el.options].map(o => norm(o.textContent)) : [],
+      ...context(el),
+    });
+  }
+  return out;
 }"""
 
 _RESTORE_JS = """() => {
@@ -336,6 +422,47 @@ class WebSurface:
             return frame if frame.evaluate("document.readyState") != "loading" else None
         except PlaywrightError:  # navigating
             return None
+
+    # --- discovery ----------------------------------------------------------------------
+
+    MAX_SNAPSHOT_ELEMENTS = 400
+
+    def snapshot(self) -> Snapshot:
+        """Everything visible and actionable/readable, across frames, with fresh refs."""
+        snapshot = Snapshot(locations=self.observe().locations)
+        for frame in self.page.frames:
+            name = None if frame is self.page.main_frame else (frame.name or None)
+            if frame is not self.page.main_frame and name is None:
+                continue  # unnamed child frames can't be targeted by an artifact
+            try:
+                raw = frame.evaluate(_SNAPSHOT_JS, [len(snapshot.elements), self.MAX_SNAPSHOT_ELEMENTS])
+            except PlaywrightError:
+                continue
+            for item in raw:
+                item["options"] = tuple(item.get("options") or ())
+                snapshot.elements.append(Element(frame=name, **item))
+        return snapshot
+
+    def resolve_ref(self, element: Element) -> Resolved:
+        """The live control behind a snapshot ref (discovery acts on refs; replay never does)."""
+        frame = self._frame(element.frame)
+        if frame is None:
+            raise ActionFailed(f"frame {element.frame!r} is gone")
+        return Resolved(frame.locator(f'[data-cua-ref="{element.ref}"]'), 0, "ref")
+
+    def matches_only(self, target: Target, element: Element) -> list[bool]:
+        """Per strategy: does it resolve to exactly one visible element, and is that `element`?"""
+        frame = self._frame(target.frame)
+        results: list[bool] = []
+        for spec in target.strategies:
+            try:
+                found = build_locator(frame, spec).filter(visible=True) if frame else None
+                unique = found is not None and found.count() == 1
+                ok = unique and found is not None and found.get_attribute("data-cua-ref") == element.ref
+            except PlaywrightError:
+                ok = False
+            results.append(ok)
+        return results
 
     def blocking_overlay(self) -> str | None:
         for frame in self.page.frames:

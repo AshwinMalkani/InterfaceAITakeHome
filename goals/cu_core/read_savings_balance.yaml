@@ -1,0 +1,14 @@
+# Discovery goal: the contract is designed here; the model discovers the flow.
+id: cu_core.member.read_savings_balance
+version: 1.0.0
+description: Look up a member by member number and return their name and share savings balance. Read-only.
+goal: >
+  Look up the member whose member number is {{inputs.member_id}} and read their full name and the
+  current balance of their Share Savings account.
+app: {product: cu_core, versions: ">=4.2 <5", surface: web}
+entry_route: /core/main
+inputs:
+  - {name: member_id, type: string, description: 5-digit member number, sensitivity: pii, pattern: '\d{5}'}
+outputs:
+  - {name: member_name, type: string, description: "Member's full name as shown on the detail screen", sensitivity: pii}
+  - {name: savings_balance, type: decimal, description: Current balance of the Share Savings account, sensitivity: pii}

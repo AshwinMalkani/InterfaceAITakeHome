@@ -248,3 +248,60 @@ class TestRedaction:
     def test_unredacted_screenshot_leaves_text_alone(self, browser_page: Page) -> None:
         browser_page.set_content(self.PAGE)
         assert WebSurface(browser_page, "http://unused").screenshot([], None).startswith(b"\x89PNG")
+
+
+class TestSnapshot:
+    PAGE = """
+    <table>
+      <tr><td>Member Number:</td><td>10001</td><td>Member Since:</td><td>1991</td></tr>
+      <tr><td>Name:</td><td>Avery Testwood</td><td></td><td></td></tr>
+    </table>
+    <table>
+      <tr><td>Suffix</td><td>Description</td><td>Balance</td></tr>
+      <tr><td>00</td><td>Share Savings</td><td>$4,719.56</td></tr>
+    </table>
+    <table><tr><td>Account Type:</td><td>
+      <select name="f2"><option>Savings</option><option>CD</option></select>
+    </td></tr></table>
+    <input type="hidden" name="secret" value="x">
+    """
+
+    def test_facts_for_legacy_markup(self, surface: WebSurface) -> None:
+        surface.page.set_content(self.PAGE)
+        snap = surface.snapshot()
+        by_text = {e.text: e for e in snap.elements if e.text}
+        balance = by_text["$4,719.56"]
+        assert (balance.row_key, balance.column_header) == ("Share Savings", "Balance")  # skips numeric "00"
+        name = by_text["Avery Testwood"]
+        assert name.prev_cell == "Name" and name.column_header == ""  # a data first row is not a header
+        select = next(e for e in snap.elements if e.role == "select")
+        assert select.left_label == "Account Type" and select.options == ("Savings", "CD")
+        assert not any(e.name_attr == "secret" for e in snap.elements)  # hidden inputs are not listed
+
+    def test_refs_resolve_to_the_listed_element(self, surface: WebSurface) -> None:
+        surface.page.set_content(self.PAGE)
+        select = next(e for e in surface.snapshot().elements if e.role == "select")
+        surface.select(surface.resolve_ref(select), "CD", 1000)
+        assert surface.page.input_value("select[name=f2]") == "CD"
+
+    def test_validation_requires_unique_match_on_the_same_element(self, surface: WebSurface) -> None:
+        surface.page.set_content(self.PAGE)
+        balance = next(e for e in surface.snapshot().elements if e.text == "$4,719.56")
+        target = Target.model_validate(
+            {
+                "strategies": [
+                    {
+                        "kind": "table_cell",
+                        "row": "Share Savings",
+                        "column": "Balance",
+                    },  # unique, same element
+                    {
+                        "kind": "table_cell",
+                        "row": "Share Savings",
+                        "column": "Description",
+                    },  # unique, wrong element
+                    {"kind": "css", "selector": "td"},  # ambiguous
+                ]
+            }
+        )
+        assert surface.matches_only(target, balance) == [True, False, False]
