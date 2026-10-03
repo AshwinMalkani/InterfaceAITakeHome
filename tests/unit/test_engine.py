@@ -557,3 +557,102 @@ class TestScreenshotRedaction:
         )
         engine.run(capability(), {"member_id": "10001"})
         assert surface.last_vocabulary is None
+
+
+class ScriptedOperator:
+    """Escalation handler that answers with a scripted decision and can change the page first."""
+
+    def __init__(
+        self,
+        *decisions: tuple[str | None, str | None],
+        on_claim: Hook | None = None,
+        surface: FakeSurface | None = None,
+    ) -> None:
+        self.decisions = list(decisions)
+        self.on_claim, self.surface = on_claim, surface
+        self.requests: list[dict[str, Any]] = []
+
+    def escalate(self, **request: Any) -> Any:
+        from cua.hitl.models import Action, Resolution
+
+        self.requests.append(request)
+        if self.on_claim and self.surface:
+            self.on_claim(self.surface)
+        action, step = self.decisions.pop(0)
+        return Resolution(
+            intervention_id=f"int_{len(self.requests)}",
+            action=Action(action) if action else None,
+            resume_step=step,
+            operator="ops-alice",
+            note="handled",
+        )
+
+
+def run_with(
+    surface: FakeSurface,
+    operator: ScriptedOperator,
+    cap: Capability | None = None,
+    gate: PolicyGate | None = None,
+) -> Any:
+    engine = ReplayEngine(
+        surface,
+        registry=SecretRegistry(include_env=False),
+        escalation=operator,
+        gate=gate,
+        success_timeout_ms=100,
+    )
+    return engine.run(cap or capability(), {"member_id": "10001"})
+
+
+class TestEscalation:
+    def test_operator_clears_the_screen_and_resumes(self) -> None:
+        surface = FakeSurface(overlay="main")
+        operator = ScriptedOperator(
+            ("resume", "s2"), on_claim=lambda s: setattr(s, "overlay", None), surface=surface
+        )
+        result = run_with(surface, operator)
+        assert isinstance(result, Success)
+        [request] = operator.requests
+        assert request["kind"] == "unknown_state" and request["step_id"] == "s1"
+        assert request["steps"] == [("s1", "fill"), ("s2", "read")]  # the resume-at choices
+        [summary] = result.interventions
+        assert (summary.action, summary.resume_step, summary.operator) == ("resume", "s2", "ops-alice")
+
+    def test_resuming_rescans_before_acting(self) -> None:
+        """If the operator hands back without fixing the screen, it escalates again rather than acting."""
+        surface = FakeSurface(overlay="main")
+        operator = ScriptedOperator(("resume", "s1"), ("abort", None))
+        result = run_with(surface, operator)
+        assert isinstance(result, Failure) and len(operator.requests) == 2
+        assert "aborted by operator ops-alice: handled" in result.message and result.needs_human
+        assert [c for c in surface.calls if c[0] == "fill"] == []  # never acted under the overlay
+
+    def test_unclaimed_request_returns_escalated_with_the_intervention_id(self) -> None:
+        from cua.replay.result import Escalated
+
+        result = run_with(FakeSurface(overlay="main"), ScriptedOperator((None, None)))
+        assert isinstance(result, Escalated) and result.intervention_id == "int_1" and result.step_id == "s1"
+
+    def test_operator_approval_runs_the_irreversible_step_once(self, tmp_path: Path) -> None:
+        cap = with_step(CONFIRM)
+        gate = TestPolicyGate().gate(tmp_path)  # not approved in the ledger, not allowed
+        surface = FakeSurface()
+        operator = ScriptedOperator(("approve", None))
+        result = run_with(surface, operator, cap, gate=gate)
+        assert isinstance(result, Success)
+        assert operator.requests[0]["kind"] == "approval" and operator.requests[0]["step_id"] == "s1b"
+        assert [c for c in surface.calls if c == ("click", "role")] == [("click", "role")]
+
+    def test_policy_denials_are_never_handed_to_a_human(self, tmp_path: Path) -> None:
+        operator = ScriptedOperator()
+        result = run_with(
+            FakeSurface(blocked_requests=["http://evil.example/x"]),
+            operator,
+            gate=TestPolicyGate().gate(tmp_path),
+        )
+        assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
+        assert operator.requests == []
+
+    def test_without_a_handler_nothing_changes(self) -> None:
+        result = run(FakeSurface(overlay="main"))
+        assert isinstance(result, Failure) and result.category is FailureCategory.UNKNOWN_STATE
