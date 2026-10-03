@@ -99,3 +99,25 @@ def profile_vocabulary(profile: AppProfile) -> frozenset[str]:
         if state.dismiss is not None:
             texts += _target_texts(state.dismiss)
     return frozenset(normalize_label(t) for t in texts if t.strip())
+
+
+_OBSERVATION_LINE = re.compile(r'^(\s+e\d+\s+(?:cell|text) )"(.*)"$')
+_OPTIONS = re.compile(r"options=\[(.*)\]")
+
+
+def redact_observation(text: str, vocabulary: frozenset[str]) -> str:
+    """Allowlist-redact a rendered snapshot for persistence: cell/text values and select options are
+    kept only if they are vocabulary. Used on discovery transcripts, which record what the model saw."""
+
+    def block(value: str) -> str:
+        return value if normalize_label(value) in vocabulary else re.sub(r"\S", "█", value)
+
+    lines = []
+    for line in text.splitlines():
+        if match := _OBSERVATION_LINE.match(line):
+            line = f'{match.group(1)}"{block(match.group(2))}"'
+        elif match := _OPTIONS.search(line):
+            options = [block(o.strip().strip("'\"")) for o in match.group(1).split(",") if o.strip()]
+            line = line[: match.start()] + "options=[" + ", ".join(repr(o) for o in options) + "]"
+        lines.append(line)
+    return "\n".join(lines)

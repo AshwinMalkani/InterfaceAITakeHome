@@ -1,0 +1,15 @@
+{
+  "capability": {
+    "content_hash": "sha256:f0b1ad452c2e54f8d7bb5399a2c1186ac26b37daf4555b65369e4163b7b17c1a",
+    "id": "cu_core.member.read_savings_balance",
+    "version": "1.0.0"
+  },
+  "duration_ms": "<normalized>",
+  "outputs": {
+    "member_name": "[PII:member_name]",
+    "savings_balance": "[PII:savings_balance]"
+  },
+  "recoveries": [],
+  "type": "success",
+  "warnings": []
+}

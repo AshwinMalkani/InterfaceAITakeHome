@@ -7,6 +7,7 @@ dependencies = [
     "pydantic>=2.7",
     "pyyaml>=6.0",
     "playwright>=1.51",
+    "anthropic>=1.11",
     # target app (apps/cu_core)
     "fastapi>=0.110",
     "uvicorn>=0.29",

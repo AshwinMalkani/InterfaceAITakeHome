@@ -44,8 +44,10 @@ MIN_KNOWN_VALUE_LEN = 3
 
 MASKING_ERROR = "[MASKING_ERROR]"
 
+# "token" but not "tokens": access_token / auth_token are credentials, input_tokens / output_tokens
+# are usage counts and must stay readable in logs.
 _SENSITIVE_KEY = re.compile(
-    r"pass(word|wd)?|secret|token|api[_-]?key|authorization|cookie|ssn|credential",
+    r"pass(word|wd)?|secret|token(?!s)|api[_-]?key|authorization|cookie|ssn|credential",
     re.IGNORECASE,
 )
 

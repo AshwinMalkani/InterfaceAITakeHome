@@ -1,0 +1,23 @@
+{
+  "capability": "cu_core.member.read_savings_balance",
+  "content_hash": "sha256:f0b1ad452c2e54f8d7bb5399a2c1186ac26b37daf4555b65369e4163b7b17c1a",
+  "reason": "artifact compiled",
+  "run_id": "run_20261003T174519_59043f",
+  "status": "recorded",
+  "verification": {
+    "capability": {
+      "content_hash": "sha256:f0b1ad452c2e54f8d7bb5399a2c1186ac26b37daf4555b65369e4163b7b17c1a",
+      "id": "cu_core.member.read_savings_balance",
+      "version": "1.0.0"
+    },
+    "duration_ms": 404,
+    "outputs": {
+      "member_name": "[PII:member_name#b3da]",
+      "savings_balance": "[PII:savings_balance#c836]"
+    },
+    "recoveries": [],
+    "type": "success",
+    "warnings": []
+  },
+  "verified": true
+}

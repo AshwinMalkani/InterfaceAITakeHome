@@ -1,0 +1,99 @@
+[
+  {
+    "expect_text": "Member Inquiry",
+    "intent": "Open Member Inquiry",
+    "kept": {
+      "frame": "menu",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Member Inquiry",
+          "role": "link"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e3",
+    "rejected": [],
+    "role": "link"
+  },
+  {
+    "expect_text": null,
+    "intent": "Enter member number",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Member Number",
+          "control": "textbox",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "input[name='f1']"
+        }
+      ]
+    },
+    "kind": "fill",
+    "ref": "e9",
+    "rejected": [],
+    "role": "textbox"
+  },
+  {
+    "expect_text": "MEMBER DETAIL",
+    "intent": "Run the search",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Search",
+          "role": "button"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e10",
+    "rejected": [],
+    "role": "button"
+  },
+  {
+    "expect_text": null,
+    "intent": "Read member name",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "field_value",
+          "label": "Name"
+        }
+      ]
+    },
+    "kind": "extract",
+    "ref": "e13",
+    "rejected": [],
+    "role": "cell"
+  },
+  {
+    "expect_text": null,
+    "intent": "Read Share Savings balance",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "column": "Balance",
+          "kind": "table_cell",
+          "row": "Share Savings"
+        },
+        {
+          "kind": "field_value",
+          "label": "Share Savings"
+        }
+      ]
+    },
+    "kind": "extract",
+    "ref": "e24",
+    "rejected": [],
+    "role": "cell"
+  }
+]

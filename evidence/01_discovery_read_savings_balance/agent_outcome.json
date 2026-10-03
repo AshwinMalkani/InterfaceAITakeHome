@@ -1,0 +1,12 @@
+{
+  "actions": 5,
+  "reason": "goal completed and success verified",
+  "status": "finished",
+  "turns": 5,
+  "usage": {
+    "cache_creation_input_tokens": 5235,
+    "cache_read_input_tokens": 11915,
+    "input_tokens": 12,
+    "output_tokens": 835
+  }
+}

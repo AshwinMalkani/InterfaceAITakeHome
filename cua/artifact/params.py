@@ -6,7 +6,7 @@ Error messages name the field and the rule, never the value: inputs are often PI
 from __future__ import annotations
 
 import re
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from decimal import Decimal, InvalidOperation
 
 from cua.artifact.schema import TEMPLATE, Capability, ParamSpec, Parse, ValueType
@@ -46,7 +46,12 @@ def _canonical(spec: ParamSpec, raw: object) -> str:
 
 def validate_inputs(capability: Capability, raw: Mapping[str, object]) -> dict[str, str]:
     """Check params against the capability's declared inputs; return canonical string values."""
-    specs = {p.name: p for p in capability.inputs}
+    return validate_values(capability.inputs, raw)
+
+
+def validate_values(input_specs: Sequence[ParamSpec], raw: Mapping[str, object]) -> dict[str, str]:
+    """Check params against input specs (a capability's, or a discovery goal's)."""
+    specs = {p.name: p for p in input_specs}
     if unknown := sorted(set(raw) - set(specs)):
         raise InputError(unknown[0], "not a declared input")
     values: dict[str, str] = {}
