@@ -154,3 +154,13 @@ cases:
     expect:
       result_type: success
       outputs: {confirmation_number: C-004501, new_suffix: "20"}
+
+  # --- discovered by the LLM (M4b): the artifact from evidence/01_discovery_read_savings_balance ---
+
+  - name: discovered_balance_replays
+    description: The LLM-discovered capability replays deterministically, for a member it never saw
+    capability: cu_core.member.read_savings_balance
+    params: {member_id: "10004"}
+    expect:
+      result_type: success
+      outputs: {member_name: Casey Fakeley, savings_balance: "9295.94"}
