@@ -53,6 +53,7 @@ from cua.evidence.sink import RunEvidence
 from cua.policy import PolicyGate, PolicyViolation
 from cua.profile import KnownState, StateKind
 from cua.replay.describe import describe_checkpoint, describe_locator, describe_target
+from cua.replay.redaction import capability_vocabulary
 from cua.replay.result import (
     NEEDS_HUMAN,
     TRANSIENT,
@@ -157,6 +158,8 @@ class ReplayEngine:
         states: Sequence[KnownState] = (),
         reauthenticate: Callable[[], bool] | None = None,
         gate: PolicyGate | None = None,
+        ui_vocabulary: frozenset[str] = frozenset(),
+        redact_screenshots: bool = True,
         success_timeout_ms: int = SUCCESS_TIMEOUT_MS,
         dismiss_timeout_ms: int = DISMISS_TIMEOUT_MS,
     ) -> None:
@@ -166,6 +169,8 @@ class ReplayEngine:
         self.states = list(states)
         self.reauthenticate = reauthenticate
         self.gate = gate
+        self.ui_vocabulary = ui_vocabulary
+        self.redact_screenshots = redact_screenshots
         self.success_timeout_ms = success_timeout_ms
         self.dismiss_timeout_ms = dismiss_timeout_ms
 
@@ -464,8 +469,11 @@ class ReplayEngine:
         evidence: list[str] = []
         if self.evidence is not None:
             name = f"{state.capability.id}.{failure.step_id}.failure.png"
+            vocabulary = (capability_vocabulary(state.capability) | self.ui_vocabulary
+                          if self.redact_screenshots else None)
             try:
-                shot = self.surface.screenshot(mask=sensitive_targets(state.capability))
+                mask = sensitive_targets(state.capability)
+                shot = self.surface.screenshot(mask=mask, vocabulary=vocabulary)
                 evidence.append(self.evidence.save_image(name, shot).name)
             except ActionFailed:  # never let evidence capture hide the real failure
                 log.warning("evidence.screenshot_failed", step_id=failure.step_id)

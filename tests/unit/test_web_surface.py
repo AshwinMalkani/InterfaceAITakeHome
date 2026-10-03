@@ -193,3 +193,58 @@ def test_request_filter_blocks_and_records_disallowed_navigation(browser_page: P
     browser_page.wait_for_timeout(300)
     assert surface.take_blocked_requests() == ["http://evil.example/steal"]
     assert "evil.example" not in browser_page.url
+
+
+class TestRedaction:
+    PAGE = """
+    <div>MEMBER DETAIL</div>
+    <table>
+      <tr><td>Name:</td><td><b>Avery Testwood</b></td></tr>
+      <tr><td>Phone:</td><td>555-0117</td></tr>
+      <tr><td>Notes:</td><td>Name: Avery Testwood</td></tr>
+    </table>
+    <input type="text" name="f1" value="10001"> <input type="submit" value="Search">
+    <iframe name="main" srcdoc="<p>Tax ID:</p><p>945-77-4657</p>"></iframe>
+    """
+    VOCABULARY = frozenset({"member detail", "name", "phone", "search", "tax id"})
+    SENSITIVE = ["Avery Testwood", "555-0117", "10001", "945-77-4657"]
+
+    def _visible(self, page: Page) -> str:
+        texts = [f.locator("body").inner_text() for f in page.frames]
+        values = page.eval_on_selector_all("input", "els => els.map(e => e.value)")
+        return " ".join(texts + values)
+
+    def test_only_vocabulary_survives_redaction(self, browser_page: Page) -> None:
+        browser_page.set_content(self.PAGE)
+        browser_page.wait_for_timeout(200)  # iframe srcdoc
+        surface = WebSurface(browser_page, "http://unused")
+        frames = surface.redact_text(self.VOCABULARY)
+        visible = self._visible(browser_page)
+        assert not [s for s in self.SENSITIVE if s in visible]
+        assert "MEMBER DETAIL" in visible and "Name:" in visible and "Tax ID:" in visible
+        assert "Search" in visible  # a vocabulary button label stays readable
+        surface.restore_text(frames)
+
+    def test_mixed_label_and_value_in_one_node_is_masked_entirely(self, browser_page: Page) -> None:
+        browser_page.set_content(self.PAGE)
+        surface = WebSurface(browser_page, "http://unused")
+        surface.redact_text(self.VOCABULARY)
+        assert "Notes" not in self._visible(browser_page)
+
+    def test_page_is_restored_exactly(self, browser_page: Page) -> None:
+        browser_page.set_content(self.PAGE)
+        browser_page.wait_for_timeout(200)
+
+        def snapshot() -> tuple[list[str], str]:
+            # Playwright's screenshot leaves empty style="" attributes behind (from hiding the caret);
+            # that's Playwright's residue, not ours, so it's ignored here.
+            html = [f.content().replace(' style=""', "") for f in browser_page.frames]
+            return html, self._visible(browser_page)
+
+        before = snapshot()
+        WebSurface(browser_page, "http://unused").screenshot([], self.VOCABULARY)
+        assert snapshot() == before
+
+    def test_unredacted_screenshot_leaves_text_alone(self, browser_page: Page) -> None:
+        browser_page.set_content(self.PAGE)
+        assert WebSurface(browser_page, "http://unused").screenshot([], None).startswith(b"\x89PNG")

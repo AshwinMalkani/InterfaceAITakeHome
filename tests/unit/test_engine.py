@@ -113,8 +113,9 @@ class FakeSurface:
     def observe(self) -> Observation:
         return Observation(title="CU-Core", locations={"main": "/core/member/detail"})
 
-    def screenshot(self, mask: list[Target]) -> bytes:
+    def screenshot(self, mask: list[Target], vocabulary: frozenset[str] | None) -> bytes:
         self.calls.append(("screenshot", len(mask)))
+        self.last_vocabulary = vocabulary
         return b"\x89PNG"
 
 
@@ -516,8 +517,12 @@ class TestPolicyGate:
         data = copy.deepcopy(minimal())
         data["entry_route"] = "/m/{{inputs.member_id}}"
         surface = FakeSurface()
-        result = run(surface, Capability.model_validate(data), params={"member_id": "../__reset"},
-                     gate=self.gate(tmp_path))
+        result = run(
+            surface,
+            Capability.model_validate(data),
+            params={"member_id": "../__reset"},
+            gate=self.gate(tmp_path),
+        )
         assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
         assert result.step_id == "entry"
         assert not [c for c in surface.calls if c[0] == "goto"]
@@ -527,3 +532,28 @@ class TestPolicyGate:
         result = run(surface, capability(entry_route="/__faults"), gate=self.gate(tmp_path))
         assert isinstance(result, Failure) and result.category is FailureCategory.POLICY_DENIED
         assert result.step_id is None and surface.calls == []
+
+
+class TestScreenshotRedaction:
+    def test_failure_screenshots_are_redacted_with_artifact_and_ui_vocabulary(self, tmp_path: Path) -> None:
+        surface = FakeSurface(missing={"table_cell"})
+        engine = ReplayEngine(
+            surface,
+            registry=SecretRegistry(include_env=False),
+            evidence=RunEvidence(tmp_path, "r"),
+            ui_vocabulary=frozenset({"phone"}),
+        )
+        engine.run(capability(), {"member_id": "10001"})
+        assert surface.last_vocabulary is not None
+        assert {"id", "savings", "balance", "done", "phone"} <= surface.last_vocabulary
+
+    def test_redaction_can_be_turned_off(self, tmp_path: Path) -> None:
+        surface = FakeSurface(missing={"table_cell"})
+        engine = ReplayEngine(
+            surface,
+            registry=SecretRegistry(include_env=False),
+            evidence=RunEvidence(tmp_path, "r"),
+            redact_screenshots=False,
+        )
+        engine.run(capability(), {"member_id": "10001"})
+        assert surface.last_vocabulary is None
