@@ -5,6 +5,7 @@
     "version": "1.0.0"
   },
   "duration_ms": "<normalized>",
+  "interventions": [],
   "outputs": {
     "member_name": "[PII:member_name]",
     "savings_balance": "[PII:savings_balance]"

@@ -8,6 +8,7 @@
   "duration_ms": "<normalized>",
   "evidence": [],
   "expected": null,
+  "interventions": [],
   "message": "input 'member_id': does not match pattern \\d{5}",
   "needs_human": false,
   "observed": null,

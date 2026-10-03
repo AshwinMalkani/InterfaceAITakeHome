@@ -15,7 +15,8 @@ from tests.regression.harness import find_leaks, load_cases
 pytestmark = pytest.mark.regression
 
 PACKAGE = Path(__file__).resolve().parents[2] / "cua"
-EGRESS_ALLOWED = {PACKAGE / "evidence" / "sink.py"}
+# The sink masks files and stdout; the HITL store masks every field it writes to sqlite.
+EGRESS_ALLOWED = {PACKAGE / "evidence" / "sink.py", PACKAGE / "hitl" / "store.py"}
 
 _WRITE_ATTRS = {"write_text", "write_bytes", "FileHandler", "dump"}
 _STD_STREAMS = {"stdout", "stderr"}
@@ -40,6 +41,8 @@ def egress_violations(source: str) -> list[str]:
         elif isinstance(func, ast.Attribute):
             if func.attr in _WRITE_ATTRS:
                 found.append(f".{func.attr}() at line {node.lineno}")
+            elif func.attr == "connect" and isinstance(func.value, ast.Name) and func.value.id == "sqlite3":
+                found.append(f"sqlite3.connect() at line {node.lineno}")
             elif func.attr == "screenshot" and any(k.arg == "path" for k in node.keywords):
                 found.append(f".screenshot(path=...) at line {node.lineno}")
             elif (
@@ -62,6 +65,7 @@ def egress_violations(source: str) -> list[str]:
         "logging.FileHandler('x')",
         "page.screenshot(path='x.png')",
         "sys.stdout.write('x')",
+        "sqlite3.connect('x.db')",
     ],
 )
 def test_egress_detector_catches(snippet: str) -> None:
@@ -73,7 +77,7 @@ def test_egress_detector_allows_reads() -> None:
 
 
 def test_only_sink_writes_output() -> None:
-    """All file/stdout output must go through cua/evidence/sink.py, which masks it."""
+    """All file/stdout/database output must go through a module that masks it (sink.py, hitl/store.py)."""
     violations = {
         str(path.relative_to(PACKAGE.parent)): found
         for path in sorted(PACKAGE.rglob("*.py"))

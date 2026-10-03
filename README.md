@@ -27,6 +27,23 @@ step unless the capability's current content is approved **and** the run passes 
 Output values are masked by default (`--reveal` prints them). Each run writes `runs/<run_id>/`
 with `events.jsonl` (structured log), `result.json`, and a masked screenshot on failure.
 
+## Human handoff
+
+Run with `--hitl` and failures a person can resolve pause the run on the same live browser instead of
+failing. Examples: an unknown modal, a missing element, or an irreversible step without approval.
+
+```bash
+.venv/bin/python -m cua console                      # terminal 2: operator console, http://127.0.0.1:8090
+.venv/bin/python -m cua replay cu_core.member.open_sub_account --base-url http://127.0.0.1:8001 \
+    --param member_id=10002 --param "account_type=Money Market" --param "nickname=Rainy day" \
+    --param opening_deposit=100.00 --hitl --headed     # stops before Confirm and asks for approval
+```
+
+In the console, **Take control**: the session's lease moves to you, and automation can't act while you
+hold it. Work in the open browser window (or attach to `--cdp-port` via chrome://inspect). Then **Hand
+back** with *resume at step*, *approve* (irreversible steps, this run only) or *abort*. Your clicks are
+captured (never the values you type) and the run resumes on the same session.
+
 ## Development
 
 ```bash

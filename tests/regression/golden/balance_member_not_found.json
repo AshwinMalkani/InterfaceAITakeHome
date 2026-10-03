@@ -6,6 +6,7 @@
   },
   "description": "No member exists with this member number",
   "duration_ms": "<normalized>",
+  "interventions": [],
   "outcome": "member_not_found",
   "recoveries": [],
   "step_id": "s3",

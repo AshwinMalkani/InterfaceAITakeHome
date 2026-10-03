@@ -10,6 +10,7 @@
     "cu_core.member.get_share_balance.s3.failure.png"
   ],
   "expected": null,
+  "interventions": [],
   "message": "application reported an error (application_error): Unhandled server error page with a reference number",
   "needs_human": false,
   "observed": {
