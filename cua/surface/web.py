@@ -160,6 +160,37 @@ _SNAPSHOT_JS = """([start, maxElements]) => {
   return out;
 }"""
 
+# Captures what an operator does in the live session: which element (role + name or nearby label),
+# never the values typed. Installed in every frame; the run only records events while a human holds
+# the lease, so automation's own clicks are never attributed to the operator.
+_CAPTURE_JS = """(() => {
+  if (window.__cuaCaptureInstalled) return;
+  window.__cuaCaptureInstalled = true;
+  const norm = s => (s || '').replace(/\\s+/g, ' ').trim().slice(0, 80);
+  const describe = el => {
+    const tag = el.tagName.toLowerCase(), type = (el.getAttribute('type') || '').toLowerCase();
+    const role = tag === 'a' ? 'link'
+      : (tag === 'button' || ['submit', 'button', 'reset'].includes(type)) ? 'button'
+      : tag === 'select' ? 'select'
+      : (tag === 'input' || tag === 'textarea') ? (type === 'password' ? 'password' : 'textbox')
+      : tag;
+    let name = (tag === 'input' && ['submit', 'button', 'reset'].includes(type)) ? el.value
+      : (role === 'link' || role === 'button') ? el.textContent : '';
+    if (!name) {
+      const cell = el.closest('td');
+      const prev = cell && cell.previousElementSibling;
+      if (prev) name = 'next to ' + norm(prev.textContent).replace(/:$/, '');
+    }
+    return role + (name ? ' ' + JSON.stringify(norm(name)) : '');
+  };
+  const report = (kind, target) => {
+    const el = target.closest ? (target.closest('a,button,input,select,textarea') || target) : target;
+    if (window.__cuaHuman) window.__cuaHuman(kind, describe(el));
+  };
+  document.addEventListener('click', e => report('click', e.target), true);
+  document.addEventListener('change', e => report('change', e.target), true);
+})()"""
+
 _RESTORE_JS = """() => {
   for (const u of (window.__cuaRedaction || []).reverse()) {
     if (u.node) u.node.nodeValue = u.text; else u.el.value = u.value;
@@ -262,10 +293,16 @@ class WebSurface:
         headless: bool = True,
         slow_mo_ms: int = 0,
         request_filter: Callable[[str], bool] | None = None,
+        cdp_port: int | None = None,
     ) -> Iterator[WebSurface]:
-        """`slow_mo_ms` delays every browser action, for watching a run; never used in production."""
+        """`slow_mo_ms` delays every browser action, for watching a run; never used in production.
+
+        `cdp_port` exposes the live session over the Chrome DevTools Protocol, so an operator can take
+        over *this* browser (chrome://inspect, or a co-browsing UI) instead of getting a fresh one.
+        """
+        args = [f"--remote-debugging-port={cdp_port}"] if cdp_port else []
         with sync_playwright() as pw:
-            browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo_ms)
+            browser = pw.chromium.launch(headless=headless, slow_mo=slow_mo_ms, args=args)
             context = browser.new_context(
                 viewport={"width": 1280, "height": 800},
                 locale="en-US",
@@ -277,6 +314,27 @@ class WebSurface:
             finally:
                 context.close()
                 browser.close()
+
+    # --- human handoff ------------------------------------------------------------------
+
+    def capture_human_actions(self, callback: Callable[[str, str, str | None], None]) -> None:
+        """Call `callback(kind, description, frame)` for operator clicks/changes in any frame.
+
+        Callbacks are delivered while a Playwright call is running, e.g. during `idle()`.
+        """
+
+        def on_event(source: dict[str, object], kind: str, description: str) -> None:
+            frame = source.get("frame")
+            name = getattr(frame, "name", None) or None
+            callback(kind, description, name)
+
+        self.page.context.expose_binding("__cuaHuman", on_event)
+        self.page.context.add_init_script(script=_CAPTURE_JS)
+        for frame in self.page.frames:  # documents that are already loaded
+            try:
+                frame.evaluate(_CAPTURE_JS)
+            except PlaywrightError:
+                continue
 
     # --- network policy -----------------------------------------------------------------
 
