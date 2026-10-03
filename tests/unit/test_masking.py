@@ -86,6 +86,12 @@ class TestStructures:
             "api_key": "[REDACTED:api_key]",
         }
 
+    def test_token_counts_are_not_credentials(self, reg: SecretRegistry) -> None:
+        out = mask_secrets({"access_token": "abc", "authToken": "def", "input_tokens": 1200,
+                            "cache_read_tokens": 900}, reg)
+        assert out == {"access_token": "[REDACTED:access_token]", "authToken": "[REDACTED:authToken]",
+                       "input_tokens": 1200, "cache_read_tokens": 900}
+
     def test_nested_dicts_lists_and_models(self, reg: SecretRegistry) -> None:
         class Result(BaseModel):
             outputs: dict[str, str]
