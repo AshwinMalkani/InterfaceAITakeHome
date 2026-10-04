@@ -6,6 +6,7 @@
   },
   "description": "The operator lacks privileges for this record (e.g. employee accounts)",
   "duration_ms": "<normalized>",
+  "interventions": [],
   "outcome": "access_denied",
   "recoveries": [],
   "step_id": "s3",

@@ -6,6 +6,8 @@ A discriminated union on `type`, deliberately separating three things callers mu
 - `business_outcome`  a legitimate answer that isn't success ("no such member"): not a crash
 - `failure`           something went wrong; says where, what was expected, what was observed,
                       whether a retry could help, and whether a human is needed
+- `escalated`         a human was asked to step in and nobody took it in time; carries the
+                      still-open intervention id
 
 Recoverable conditions (a maintenance notice, an expired session, a slow page) don't appear as
 result types at all: they were handled. They are listed in `recoveries` so nothing is silent.
@@ -59,6 +61,15 @@ NEEDS_HUMAN = frozenset(
     {FailureCategory.UNEXPECTED_DIALOG, FailureCategory.UNKNOWN_STATE, FailureCategory.APPROVAL_REQUIRED}
 )
 
+# What a human operator can resolve in the live session when escalation is enabled. Policy denials
+# and invalid inputs are deliberately absent: a human can't click their way past the allowlist.
+ESCALATABLE = NEEDS_HUMAN | {
+    FailureCategory.TARGET_NOT_FOUND,
+    FailureCategory.CHECKPOINT_FAILED,
+    FailureCategory.ACTION_FAILED,
+    FailureCategory.SESSION_EXPIRED,
+}
+
 
 class CapabilityRef(BaseModel):
     id: str
@@ -80,12 +91,25 @@ class Recovery(BaseModel):
     detail: str
 
 
+class InterventionSummary(BaseModel):
+    """A human handoff that happened during this run (details in the HITL store and the run log)."""
+
+    id: str
+    kind: str
+    step_id: str
+    action: Literal["resume", "approve", "abort"] | None  # None = nobody claimed it in time
+    operator: str | None = None
+    resume_step: str | None = None
+    human_actions: int = 0
+
+
 class Success(BaseModel):
     type: Literal["success"] = "success"
     capability: CapabilityRef
     outputs: dict[str, Any]
     warnings: list[ReplayWarning] = []
     recoveries: list[Recovery] = []
+    interventions: list[InterventionSummary] = []
     duration_ms: int
 
 
@@ -97,6 +121,7 @@ class BusinessOutcome(BaseModel):
     step_id: str
     warnings: list[ReplayWarning] = []
     recoveries: list[Recovery] = []
+    interventions: list[InterventionSummary] = []
     duration_ms: int
 
 
@@ -113,7 +138,23 @@ class Failure(BaseModel):
     evidence: list[str] = []  # files in the run's evidence directory
     warnings: list[ReplayWarning] = []
     recoveries: list[Recovery] = []
+    interventions: list[InterventionSummary] = []
     duration_ms: int
 
 
-Result = Annotated[Success | BusinessOutcome | Failure, Field(discriminator="type")]
+class Escalated(BaseModel):
+    """A human is needed and none took the request in time. The intervention stays open: an operator
+    can still pick it up, and the caller can poll it or route it (e.g. to a support queue)."""
+
+    type: Literal["escalated"] = "escalated"
+    capability: CapabilityRef
+    intervention_id: str
+    step_id: str
+    reason: str
+    warnings: list[ReplayWarning] = []
+    recoveries: list[Recovery] = []
+    interventions: list[InterventionSummary] = []
+    duration_ms: int
+
+
+Result = Annotated[Success | BusinessOutcome | Failure | Escalated, Field(discriminator="type")]

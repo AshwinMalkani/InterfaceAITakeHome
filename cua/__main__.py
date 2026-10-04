@@ -3,6 +3,7 @@
 python -m cua replay <capability_id> --base-url URL --param name=value ... [--allow-irreversible]
 python -m cua approve <capability_id> --by NAME [--note TEXT]
 python -m cua discover <goal.yaml> --base-url URL --param name=value ... [--save]
+python -m cua console [--port 8090]
 """
 
 from __future__ import annotations
@@ -14,12 +15,14 @@ from pathlib import Path
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import configure_logging
 from cua.evidence.sink import echo
+from cua.hitl.store import HitlStore
 from cua.policy import ApprovalLedger, load_policy
 from cua.profile import load_profile
 from cua.runner import replay
 
 REPO = Path(__file__).resolve().parents[1]
-EXIT_CODES = {"success": 0, "failure": 1, "business_outcome": 2}
+EXIT_CODES = {"success": 0, "failure": 1, "business_outcome": 2, "escalated": 3}
+HITL_STORE = REPO / "runs" / "hitl.db"
 
 
 def _params(pairs: list[str]) -> dict[str, str]:
@@ -53,6 +56,13 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="don't redact failure screenshots (only if the product's policy allows it)",
     )
+    run.add_argument(
+        "--hitl",
+        action="store_true",
+        help="escalate to a human operator instead of failing (see `cua console`)",
+    )
+    run.add_argument("--cdp-port", type=int, default=None, help="expose the live session for remote takeover")
+    run.add_argument("--handoff-timeout", type=float, default=900, help="seconds to wait for an operator")
     run.add_argument("--evidence-dir", type=Path, default=REPO / "runs")
     run.add_argument("--request-id", help="caller's request id, for correlating logs")
     run.add_argument("--headed", action="store_true", help="show the browser")
@@ -74,6 +84,11 @@ def main(argv: list[str] | None = None) -> int:
     disc.add_argument("--overwrite", action="store_true", help="with --save, replace an existing artifact")
     disc.add_argument("--headed", action="store_true")
 
+    console = commands.add_parser("console", help="operator console for human handoff")
+    console.add_argument("--port", type=int, default=8090)
+    console.add_argument("--store", type=Path, default=HITL_STORE)
+    console.add_argument("--evidence-dir", type=Path, default=REPO / "runs")
+
     approve = commands.add_parser("approve", help="approve a capability's current content (irreversible use)")
     approve.add_argument("capability_id")
     approve.add_argument("--by", required=True, help="who is approving")
@@ -84,6 +99,8 @@ def main(argv: list[str] | None = None) -> int:
     library = CapabilityLibrary(args.library)
     if args.command == "discover":  # the goal file names its product
         return _discover(args, library)
+    if args.command == "console":
+        return _console(args)
     product = args.capability_id.split(".", 1)[0]
 
     if args.command == "approve":
@@ -106,6 +123,9 @@ def main(argv: list[str] | None = None) -> int:
         request_id=args.request_id,
         headless=not args.headed,
         slow_mo_ms=args.slow_mo,
+        hitl=HitlStore(HITL_STORE) if args.hitl else None,
+        cdp_port=args.cdp_port,
+        unclaimed_timeout_s=args.handoff_timeout,
     )
     echo(
         {
@@ -117,6 +137,16 @@ def main(argv: list[str] | None = None) -> int:
         reveal=args.reveal,
     )
     return EXIT_CODES[outcome.result.type]
+
+
+def _console(args: argparse.Namespace) -> int:
+    import uvicorn
+
+    from cua.hitl.console import create_console
+
+    app = create_console(HitlStore(args.store), args.evidence_dir)
+    uvicorn.run(app, host="127.0.0.1", port=args.port, log_level="warning")
+    return 0
 
 
 def _discover(args: argparse.Namespace, library: CapabilityLibrary) -> int:
