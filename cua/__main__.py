@@ -83,6 +83,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     disc.add_argument("--overwrite", action="store_true", help="with --save, replace an existing artifact")
     disc.add_argument("--headed", action="store_true")
+    disc.add_argument(
+        "--hitl",
+        action="store_true",
+        help="let the agent ask a human, and require approval for irreversible actions (see `cua console`)",
+    )
+    disc.add_argument("--cdp-port", type=int, default=None)
+    disc.add_argument("--handoff-timeout", type=float, default=900)
 
     console = commands.add_parser("console", help="operator console for human handoff")
     console.add_argument("--port", type=int, default=8090)
@@ -166,10 +173,15 @@ def _discover(args: argparse.Namespace, library: CapabilityLibrary) -> int:
         evidence_root=args.evidence_dir,
         headless=not args.headed,
         max_actions=args.max_actions,
+        hitl=HitlStore(HITL_STORE) if args.hitl else None,
+        cdp_port=args.cdp_port,
+        unclaimed_timeout_s=args.handoff_timeout,
     )
     summary: dict[str, object] = {
         "run_id": outcome.run_id,
         "status": outcome.status,
+        "verification_scope": outcome.verification_scope,
+        "interventions": [i.model_dump(mode="json") for i in outcome.interventions],
         "reason": outcome.reason,
         "verified": outcome.verified,
         "evidence_dir": str(outcome.evidence_dir),
