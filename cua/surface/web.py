@@ -501,6 +501,22 @@ class WebSurface:
                 snapshot.elements.append(Element(frame=name, **item))
         return snapshot
 
+    def document_ids(self) -> dict[str | None, float]:
+        """Identity of the document each frame currently shows (changes on every navigation or reload).
+
+        Frame name -> performance.timeOrigin, with None for the top document.
+        """
+        ids: dict[str | None, float] = {}
+        for frame in self.page.frames:
+            name = None if frame is self.page.main_frame else (frame.name or None)
+            if frame is not self.page.main_frame and name is None:
+                continue
+            try:
+                ids[name] = float(frame.evaluate("performance.timeOrigin"))
+            except PlaywrightError:
+                continue
+        return ids
+
     def resolve_ref(self, element: Element) -> Resolved:
         """The live control behind a snapshot ref (discovery acts on refs; replay never does)."""
         frame = self._frame(element.frame)
