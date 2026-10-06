@@ -280,9 +280,10 @@ class WebSurface:
         self._request_filter = request_filter
         page.on("dialog", self._on_dialog)
         if request_filter is not None:
-            # Network-level enforcement: every request (navigations, frames, XHR, images) passes
-            # the filter, so a click that leads somewhere disallowed is stopped as well.
-            page.route("**/*", self._filter_request)
+            # Network-level enforcement on the whole browser context: every request from every tab
+            # (navigations, frames, XHR, images, popups opened with target=_blank, a tab an operator
+            # opens) passes the filter. Page-level routing would let other tabs escape the allowlist.
+            page.context.route("**/*", self._filter_request)
 
     @classmethod
     @contextmanager
@@ -328,8 +329,10 @@ class WebSurface:
             name = getattr(frame, "name", None) or None
             callback(kind, description, name)
 
-        self.page.context.expose_binding("__cuaHuman", on_event)
-        self.page.context.add_init_script(script=_CAPTURE_JS)
+        # Scoped to the automation's own page (all its frames), never the whole context: other tabs
+        # are not the session being handed off, and their clicks must not count as operator actions.
+        self.page.expose_binding("__cuaHuman", on_event)
+        self.page.add_init_script(script=_CAPTURE_JS)
         for frame in self.page.frames:  # documents that are already loaded
             try:
                 frame.evaluate(_CAPTURE_JS)
