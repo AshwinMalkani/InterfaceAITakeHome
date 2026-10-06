@@ -187,3 +187,39 @@ cases:
     expect:
       result_type: success
       outputs: {confirmation_number: C-004501, new_suffix: "20"}
+
+  # --- cross-tenant reuse (M6a): one vendor-level artifact + a tenant binding, no re-recording ---
+
+  - name: balance_beta_with_binding
+    description: >
+      The same artifact that drifts on beta (balance_beta_tenant_drift) succeeds with beta's binding,
+      with no fallback warnings: the relabelled fields are mapped, not guessed.
+    capability: cu_core.member.get_share_balance
+    tenant: beta
+    binding: beta
+    params: {member_id: "10001"}
+    expect:
+      result_type: success
+      outputs: {member_name: Avery Testwood, savings_balance: "4719.56"}
+
+  - name: discovered_balance_on_beta
+    description: The LLM-discovered capability (recorded on alpha) runs on beta through the same binding
+    capability: cu_core.member.read_savings_balance
+    tenant: beta
+    binding: beta
+    params: {member_id: "10004"}
+    expect:
+      result_type: success
+      outputs: {member_name: Casey Fakeley, savings_balance: "9295.94"}
+
+  - name: open_on_beta_approved_for_beta
+    description: Irreversible capability on beta, approved as specialized for beta (approval is per tenant)
+    capability: cu_core.member.open_sub_account
+    tenant: beta
+    binding: beta
+    params: {member_id: "10002", account_type: Money Market, nickname: Rainy day, opening_deposit: "100.00"}
+    approved: true
+    allow_irreversible: true
+    expect:
+      result_type: success
+      outputs: {confirmation_number: C-004501, new_suffix: "20"}

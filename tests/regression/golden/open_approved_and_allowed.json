@@ -2,6 +2,7 @@
   "capability": {
     "content_hash": "sha256:93beac72e8797d8c26725751345ebf7f286d33606b9a36a4643d777d9f242a2a",
     "id": "cu_core.member.open_sub_account",
+    "tenant": null,
     "version": "1.0.0"
   },
   "duration_ms": "<normalized>",

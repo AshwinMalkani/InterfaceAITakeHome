@@ -1,8 +1,8 @@
 {
   "capability": {
-    "content_hash": "sha256:0afb21c5efaa72cd2b5b307acfb329690877935b4b3086b22051910aac26a3e6",
-    "id": "cu_core.member.open_funded_sub_account",
-    "tenant": null,
+    "content_hash": "sha256:b5cb88c5fcc4ab38999c8119a1538b6c5291fbba6252b9bae2ea109688483dbc",
+    "id": "cu_core.member.open_sub_account",
+    "tenant": "beta",
     "version": "1.0.0"
   },
   "duration_ms": "<normalized>",

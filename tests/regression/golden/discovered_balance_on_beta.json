@@ -1,8 +1,8 @@
 {
   "capability": {
-    "content_hash": "sha256:f0b1ad452c2e54f8d7bb5399a2c1186ac26b37daf4555b65369e4163b7b17c1a",
+    "content_hash": "sha256:a41edb450e22ed1ad47d5ed01fa0cdb8edb761bceda858bd2b69e5fd40a1bc71",
     "id": "cu_core.member.read_savings_balance",
-    "tenant": null,
+    "tenant": "beta",
     "version": "1.0.0"
   },
   "duration_ms": "<normalized>",
