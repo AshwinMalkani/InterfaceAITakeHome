@@ -159,14 +159,26 @@ class ApprovalLedger:
         raw = json.loads(path.read_text()) if path.exists() else {}
         self.entries = {k: Approval.model_validate(v) for k, v in raw.items()}
 
-    def is_approved(self, capability: Capability) -> bool:
-        entry = self.entries.get(capability.id)
+    @staticmethod
+    def key(capability: Capability, tenant: str | None = None) -> str:
+        """Approvals are per tenant: a tenant-specialized capability is different behaviour."""
+        return f"{capability.id}@{tenant}" if tenant else capability.id
+
+    def is_approved(self, capability: Capability, tenant: str | None = None) -> bool:
+        entry = self.entries.get(self.key(capability, tenant))
         return entry is not None and entry.content_hash == capability.content_hash()
 
-    def approve(self, capability: Capability, approved_by: str, note: str = "") -> Approval:
-        entry = Approval(version=capability.version, content_hash=capability.content_hash(),
-                         approved_by=approved_by, approved_at=datetime.now(UTC), note=note)
-        self.entries[capability.id] = entry
+    def approve(
+        self, capability: Capability, approved_by: str, note: str = "", tenant: str | None = None
+    ) -> Approval:
+        entry = Approval(
+            version=capability.version,
+            content_hash=capability.content_hash(),
+            approved_by=approved_by,
+            approved_at=datetime.now(UTC),
+            note=note,
+        )
+        self.entries[self.key(capability, tenant)] = entry
         sink.write_json(self.path, {k: v.model_dump(mode="json") for k, v in sorted(self.entries.items())})
         return entry
 
@@ -182,12 +194,19 @@ class PolicyGate:
     """One run's view of the policy: the tenant it's bound to and what the caller authorized."""
 
     def __init__(
-        self, policy: Policy, *, base_url: str, approvals: ApprovalLedger, allow_irreversible: bool = False
+        self,
+        policy: Policy,
+        *,
+        base_url: str,
+        approvals: ApprovalLedger,
+        allow_irreversible: bool = False,
+        tenant: str | None = None,
     ) -> None:
         self.policy = policy
         self.base_url = base_url
         self.approvals = approvals
         self.allow_irreversible = allow_irreversible
+        self.tenant = tenant
 
     def preflight(self, capability: Capability) -> list[str]:
         """Static violations, found before a browser opens. Empty list = may run."""
@@ -201,8 +220,11 @@ class PolicyGate:
         for step in capability.steps:
             if step.action.kind not in self.policy.allowed_actions:
                 problems.append(f"step {step.id}: action {step.action.kind!r} is not allowed")
-            if (route := getattr(step.action, "route", None)) and "{{" not in route \
-                    and not self.policy.route_allowed(route):
+            if (
+                (route := getattr(step.action, "route", None))
+                and "{{" not in route
+                and not self.policy.route_allowed(route)
+            ):
                 problems.append(f"step {step.id}: route {route!r} is not allowed")
             if self.policy.classify(step) is Risk.IRREVERSIBLE and step.risk is not Risk.IRREVERSIBLE:
                 problems.append(f"step {step.id}: looks irreversible but is declared {step.risk.value!r}")
@@ -215,7 +237,7 @@ class PolicyGate:
 
     def irreversible_blocker(self, capability: Capability) -> str | None:
         """Why an irreversible step may not run now, or None if it may."""
-        if not self.approvals.is_approved(capability):
+        if not self.approvals.is_approved(capability, self.tenant):
             return "capability's current content is not approved"
         if not self.allow_irreversible:
             return "caller did not allow irreversible actions for this run"

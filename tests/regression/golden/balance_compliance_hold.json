@@ -2,6 +2,7 @@
   "capability": {
     "content_hash": "sha256:e7eb3ceed302ab460393ed54b0a10c0b47569eb47703211a7a5bf5e5640430d2",
     "id": "cu_core.member.get_share_balance",
+    "tenant": null,
     "version": "1.1.0"
   },
   "category": "unknown_state",

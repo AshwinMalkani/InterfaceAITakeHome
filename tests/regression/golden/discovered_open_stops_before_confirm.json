@@ -2,6 +2,7 @@
   "capability": {
     "content_hash": "sha256:0afb21c5efaa72cd2b5b307acfb329690877935b4b3086b22051910aac26a3e6",
     "id": "cu_core.member.open_funded_sub_account",
+    "tenant": null,
     "version": "1.0.0"
   },
   "category": "approval_required",

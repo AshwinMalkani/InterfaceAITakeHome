@@ -27,6 +27,17 @@ step unless the capability's current content is approved **and** the run passes 
 Output values are masked by default (`--reveal` prints them). Each run writes `runs/<run_id>/`
 with `events.jsonl` (structured log), `result.json`, and a masked screenshot on failure.
 
+## Another tenant, same artifact
+
+Capabilities are recorded once per vendor product. A tenant running the same product gets a small binding
+(`config/tenants/beta.yaml`: relabelled fields, rare per-step patches) instead of a re-recording:
+
+```bash
+make app-beta                                         # tenant beta on :8002
+.venv/bin/python -m cua replay cu_core.member.get_share_balance --base-url http://127.0.0.1:8002 \
+    --param member_id=10001 --tenant beta
+```
+
 ## Human handoff
 
 Run with `--hitl` and failures a person can resolve pause the run on the same live browser instead of

@@ -12,6 +12,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from cua.artifact.binding import load_binding, specialize
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import configure_logging
 from cua.evidence.sink import echo
@@ -56,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="don't redact failure screenshots (only if the product's policy allows it)",
     )
+    run.add_argument("--tenant", help="apply this tenant's binding (config/tenants/<tenant>.yaml)")
     run.add_argument(
         "--hitl",
         action="store_true",
@@ -100,6 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     approve.add_argument("capability_id")
     approve.add_argument("--by", required=True, help="who is approving")
     approve.add_argument("--note", default="")
+    approve.add_argument("--tenant", help="approve the capability as specialized for this tenant")
     args = parser.parse_args(argv)
 
     configure_logging()
@@ -112,7 +115,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "approve":
         capability = library.get(args.capability_id)
-        entry = ApprovalLedger(args.library / "approvals.json").approve(capability, args.by, args.note)
+        if args.tenant:
+            capability = specialize(capability, load_binding(args.tenant, product))
+        ledger = ApprovalLedger(args.library / "approvals.json")
+        entry = ledger.approve(capability, args.by, args.note, tenant=args.tenant)
         echo({"approved": capability.id, **entry.model_dump(mode="json")})
         return 0
 
@@ -133,6 +139,7 @@ def main(argv: list[str] | None = None) -> int:
         hitl=HitlStore(HITL_STORE) if args.hitl else None,
         cdp_port=args.cdp_port,
         unclaimed_timeout_s=args.handoff_timeout,
+        tenant=args.tenant,
     )
     echo(
         {

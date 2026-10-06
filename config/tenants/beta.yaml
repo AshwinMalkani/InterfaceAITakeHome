@@ -1,0 +1,18 @@
+# Tenant binding for Harbor Point FCU: same CU-Core product as the base tenant, relabelled.
+# Reviewed like code; specializing a capability with it changes the capability's content hash, so an
+# irreversible capability needs its own approval on this tenant.
+tenant: beta
+product: cu_core
+description: Harbor Point FCU (CU-Core 4.3.1) relabels three fields; screen structure is unchanged.
+
+labels:
+  Member Number: "Account #"
+  Search: Find
+  Share Savings: Primary Share
+
+steps:
+  # The funding dropdown's option label embeds the account description.
+  cu_core.member.open_sub_account:
+    s8: {option: "00 - Primary Share"}
+  cu_core.member.open_funded_sub_account:
+    s8: {option: "00 - Primary Share"}

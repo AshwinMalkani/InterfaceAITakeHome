@@ -52,6 +52,7 @@ class Case(BaseModel):
     params: dict[str, Any] = {}
     faults: list[dict[str, Any]] = []  # apps.cu_core.faults.Fault, armed before the run
     approved: bool = False  # approve the capability's current content in a temporary ledger
+    binding: str | None = None  # tenant binding to specialize the capability with (config/tenants)
     allow_irreversible: bool = False
     expect: Expectation
 

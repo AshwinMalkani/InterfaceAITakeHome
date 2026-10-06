@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 from apps.cu_core.data import MemberStore
+from cua.artifact.binding import load_binding, specialize
 from cua.artifact.store import CapabilityLibrary
 from cua.policy import ApprovalLedger, load_policy
 from cua.profile import load_profile
@@ -31,8 +32,11 @@ def test_case(case: Case, target_apps: dict[str, TargetApp], tmp_path: Path) -> 
 
     product = case.capability.split(".", 1)[0]
     approvals = ApprovalLedger(tmp_path / "approvals.json")  # never the committed ledger
-    if case.approved:
-        approvals.approve(LIBRARY.get(case.capability), "regression-suite")
+    if case.approved:  # approve exactly what will run: the tenant-specialized content, if a binding applies
+        capability = LIBRARY.get(case.capability)
+        if case.binding:
+            capability = specialize(capability, load_binding(case.binding, product))
+        approvals.approve(capability, "regression-suite", tenant=case.binding)
 
     outcome = replay(
         case.capability,
@@ -44,6 +48,7 @@ def test_case(case: Case, target_apps: dict[str, TargetApp], tmp_path: Path) -> 
         approvals=approvals,
         allow_irreversible=case.allow_irreversible,
         evidence_root=tmp_path / "runs",
+        tenant=case.binding,
     )
     result = outcome.result
 

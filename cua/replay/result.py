@@ -74,7 +74,8 @@ ESCALATABLE = NEEDS_HUMAN | {
 class CapabilityRef(BaseModel):
     id: str
     version: str
-    content_hash: str
+    content_hash: str  # of the content that actually ran (tenant-specialized, if a binding applied)
+    tenant: str | None = None
 
 
 class ReplayWarning(BaseModel):
