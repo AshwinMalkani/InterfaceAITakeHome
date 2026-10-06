@@ -1,0 +1,25 @@
+# Discovery goal for an IRREVERSIBLE flow. Run with --hitl: the agent may not click anything
+# irreversible (the final Confirm) without an operator's approval in `cua console`.
+id: cu_core.member.open_funded_sub_account
+version: 1.0.0
+description: >
+  Open a new sub-account for a member, funded from their Share Savings account, and return the
+  confirmation number and new suffix. IRREVERSIBLE: moves money and creates an account.
+goal: >
+  For the member whose member number is {{inputs.member_id}}, open a new sub-account of type
+  {{inputs.account_type}} with nickname {{inputs.nickname}} and an opening deposit of
+  {{inputs.opening_deposit}}, funded from the member's Share Savings account (suffix 00).
+  Confirm it, then read the confirmation number and the new suffix.
+app: {product: cu_core, versions: ">=4.2 <5", surface: web}
+entry_route: /core/main
+inputs:
+  - {name: member_id, type: string, description: 5-digit member number, sensitivity: pii, pattern: '\d{5}'}
+  - name: account_type
+    type: string
+    description: Type of sub-account to open
+    choices: [Share Certificate, Money Market, Holiday Club]
+  - {name: nickname, type: string, description: Nickname shown on statements}
+  - {name: opening_deposit, type: decimal, description: Amount moved from share savings, sensitivity: pii}
+outputs:
+  - {name: confirmation_number, type: string, description: "Core system confirmation, e.g. C-004512"}
+  - {name: new_suffix, type: string, description: Suffix of the newly opened sub-account}

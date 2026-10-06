@@ -1,0 +1,16 @@
+{
+  "capability": {
+    "content_hash": "sha256:0afb21c5efaa72cd2b5b307acfb329690877935b4b3086b22051910aac26a3e6",
+    "id": "cu_core.member.open_funded_sub_account",
+    "version": "1.0.0"
+  },
+  "duration_ms": "<normalized>",
+  "interventions": [],
+  "outputs": {
+    "confirmation_number": "C-004501",
+    "new_suffix": "20"
+  },
+  "recoveries": [],
+  "type": "success",
+  "warnings": []
+}

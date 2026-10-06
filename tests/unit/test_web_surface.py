@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import contextlib
 from collections.abc import Iterator
 from typing import Any
 
 import pytest
 from playwright.sync_api import Browser, Page, sync_playwright
+from playwright.sync_api import Error as PlaywrightError
 from pydantic import TypeAdapter
 
 from cua.artifact.schema import Checkpoint, DialogExpectation, Target
@@ -305,3 +307,33 @@ class TestSnapshot:
             }
         )
         assert surface.matches_only(target, balance) == [True, False, False]
+
+
+def test_policy_covers_every_tab_in_the_session(browser: Browser) -> None:
+    """A popup or a second tab must not escape the allowlist (found in the real HITL run)."""
+    context = browser.new_context()
+    page = context.new_page()
+    surface = WebSurface(page, "http://unused", request_filter=lambda url: "evil.example" not in url)
+    other = context.new_page()  # e.g. a target=_blank popup, or a tab an operator opened
+    with contextlib.suppress(PlaywrightError):  # aborted by the filter
+        other.goto("http://evil.example/steal", timeout=3000)
+    assert surface.take_blocked_requests() == ["http://evil.example/steal"]
+    context.close()
+
+
+def test_human_action_capture_is_scoped_to_the_session_page(browser: Browser) -> None:
+    """Clicks in another tab (e.g. the operator console) are not actions in the handed-off session."""
+    context = browser.new_context()
+    page, other = context.new_page(), context.new_page()
+    seen: list[str] = []
+    surface = WebSurface(page, "http://unused")
+    surface.capture_human_actions(lambda kind, description, frame: seen.append(description))
+    # Real navigations after capture is installed (init scripts run on navigation, not set_content),
+    # like the console tab opened mid-handoff in the real run.
+    page.goto("data:text/html,<input type=button value='In session'>")
+    other.goto("data:text/html,<input type=button value='Hand back'>")
+    other.click("input")
+    page.click("input")
+    page.wait_for_timeout(200)
+    assert seen == ['button "In session"']
+    context.close()

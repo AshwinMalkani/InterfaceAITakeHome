@@ -280,9 +280,10 @@ class WebSurface:
         self._request_filter = request_filter
         page.on("dialog", self._on_dialog)
         if request_filter is not None:
-            # Network-level enforcement: every request (navigations, frames, XHR, images) passes
-            # the filter, so a click that leads somewhere disallowed is stopped as well.
-            page.route("**/*", self._filter_request)
+            # Network-level enforcement on the whole browser context: every request from every tab
+            # (navigations, frames, XHR, images, popups opened with target=_blank, a tab an operator
+            # opens) passes the filter. Page-level routing would let other tabs escape the allowlist.
+            page.context.route("**/*", self._filter_request)
 
     @classmethod
     @contextmanager
@@ -328,8 +329,10 @@ class WebSurface:
             name = getattr(frame, "name", None) or None
             callback(kind, description, name)
 
-        self.page.context.expose_binding("__cuaHuman", on_event)
-        self.page.context.add_init_script(script=_CAPTURE_JS)
+        # Scoped to the automation's own page (all its frames), never the whole context: other tabs
+        # are not the session being handed off, and their clicks must not count as operator actions.
+        self.page.expose_binding("__cuaHuman", on_event)
+        self.page.add_init_script(script=_CAPTURE_JS)
         for frame in self.page.frames:  # documents that are already loaded
             try:
                 frame.evaluate(_CAPTURE_JS)
@@ -500,6 +503,22 @@ class WebSurface:
                 item["options"] = tuple(item.get("options") or ())
                 snapshot.elements.append(Element(frame=name, **item))
         return snapshot
+
+    def document_ids(self) -> dict[str | None, float]:
+        """Identity of the document each frame currently shows (changes on every navigation or reload).
+
+        Frame name -> performance.timeOrigin, with None for the top document.
+        """
+        ids: dict[str | None, float] = {}
+        for frame in self.page.frames:
+            name = None if frame is self.page.main_frame else (frame.name or None)
+            if frame is not self.page.main_frame and name is None:
+                continue
+            try:
+                ids[name] = float(frame.evaluate("performance.timeOrigin"))
+            except PlaywrightError:
+                continue
+        return ids
 
     def resolve_ref(self, element: Element) -> Resolved:
         """The live control behind a snapshot ref (discovery acts on refs; replay never does)."""

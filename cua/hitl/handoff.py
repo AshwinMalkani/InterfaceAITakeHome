@@ -44,7 +44,7 @@ class GuardedSurface:
         self.store = store
         self.session_id = session_id
 
-    def _require_control(self) -> None:
+    def require_control(self) -> None:
         lease = self.store.lease(self.session_id)
         if lease.owner is not Owner.AUTOMATION:
             raise ActionFailed(
@@ -53,23 +53,23 @@ class GuardedSurface:
 
     # acting: guarded
     def goto(self, route: str) -> None:
-        self._require_control()
+        self.require_control()
         self.inner.goto(route)
 
     def click(self, resolved: Resolved, dialog: DialogExpectation | None, timeout_ms: int) -> None:
-        self._require_control()
+        self.require_control()
         self.inner.click(resolved, dialog, timeout_ms)
 
     def fill(self, resolved: Resolved, value: str, timeout_ms: int) -> None:
-        self._require_control()
+        self.require_control()
         self.inner.fill(resolved, value, timeout_ms)
 
     def select(self, resolved: Resolved, option: str, timeout_ms: int) -> None:
-        self._require_control()
+        self.require_control()
         self.inner.select(resolved, option, timeout_ms)
 
     def press(self, key: str, resolved: Resolved | None, timeout_ms: int) -> None:
-        self._require_control()
+        self.require_control()
         self.inner.press(key, resolved, timeout_ms)
 
     # observing: pass through

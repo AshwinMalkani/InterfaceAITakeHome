@@ -44,6 +44,15 @@ states:
 # (everything else on screen is masked). Labels only: never values.
 ui_vocabulary:
   - Main Menu
+  - Member Inquiry
+  - MEMBER INQUIRY
+  - MEMBER DETAIL
+  - Member Number
+  - Search
+  - OPEN SUB-ACCOUNT
+  - REVIEW NEW SUB-ACCOUNT
+  - SUB-ACCOUNT OPENED
+  - Confirm
   - Reports
   - GL Posting
   - Sign Off

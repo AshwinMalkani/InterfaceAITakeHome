@@ -6,12 +6,16 @@ The run's evidence directory holds the structured log, the masked model transcri
 steps (with rejected locator candidates), the compiled artifact, and the verification replay. A
 discovery only counts as successful if the artifact it produced replays successfully without the
 model, on the same inputs.
+
+Irreversible capabilities are verified only up to their first irreversible step: replay must get
+there and be stopped by policy (`approval_required`). Re-executing an irreversible action just to
+test a recording (opening a second account) is never acceptable.
 """
 
 from __future__ import annotations
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Literal
 
@@ -21,17 +25,19 @@ from cua.agent.loop import AgentOutcome, DiscoveryAgent
 from cua.agent.recorder import Recorder, RecordingError, compile_capability
 from cua.agent.tools import DiscoveryTools, tool_definitions
 from cua.artifact.params import validate_values
-from cua.artifact.schema import Capability
+from cua.artifact.schema import Capability, Risk
 from cua.artifact.store import CapabilityLibrary
 from cua.evidence.log import attach_handler, get_logger, run_context
 from cua.evidence.sink import RunEvidence
+from cua.hitl.handoff import GuardedSurface, LiveHandoff
+from cua.hitl.store import HitlStore
 from cua.policy import ApprovalLedger, Policy, PolicyGate
 from cua.profile import AppProfile, StateKind
 from cua.replay.engine import ReplayEngine
 from cua.replay.redaction import capability_vocabulary, profile_vocabulary, redact_observation
-from cua.replay.result import Result
+from cua.replay.result import Failure, FailureCategory, InterventionSummary, Result
 from cua.runner import new_run_id, replay
-from cua.security.masking import SecretRegistry, use_registry
+from cua.security.masking import SecretRegistry, Sensitivity, use_registry
 from cua.surface.web import WebSurface
 
 log = get_logger(__name__)
@@ -45,10 +51,25 @@ class DiscoveryOutcome:
     evidence_dir: Path
     capability: Capability | None
     verification: Result | None  # replay of the compiled artifact, no model involved
+    interventions: list[InterventionSummary] = field(default_factory=list)
+
+    @property
+    def verification_scope(self) -> Literal["full", "until_irreversible"]:
+        irreversible = self.capability is not None and self.capability.max_risk is Risk.IRREVERSIBLE
+        return "until_irreversible" if irreversible else "full"
 
     @property
     def verified(self) -> bool:
-        return self.verification is not None and self.verification.type == "success"
+        if self.verification is None or self.capability is None:
+            return False
+        if self.verification_scope == "full":
+            return self.verification.type == "success"
+        first = next(s.id for s in self.capability.steps if s.risk is Risk.IRREVERSIBLE)
+        return (
+            isinstance(self.verification, Failure)
+            and self.verification.step_id == first
+            and self.verification.category is FailureCategory.APPROVAL_REQUIRED
+        )
 
 
 def discover(
@@ -64,6 +85,9 @@ def discover(
     headless: bool = True,
     max_actions: int = 30,
     verify: bool = True,
+    hitl: HitlStore | None = None,
+    cdp_port: int | None = None,
+    unclaimed_timeout_s: float = 900,
 ) -> DiscoveryOutcome:
     values = validate_values(goal.inputs, params)  # same contract checks as replay
     sign_on = library.get(profile.sign_on.capability) if profile.sign_on else None
@@ -82,7 +106,9 @@ def discover(
         run_context(run_id, mode="discovery", capability_id=goal.id),
     ):
         log.info("discovery.started", goal=goal.id, model=model.name, base_url=base_url)
-        with WebSurface.launch(base_url, headless=headless, request_filter=gate.allows_request) as surface:
+        with WebSurface.launch(
+            base_url, headless=headless, request_filter=gate.allows_request, cdp_port=cdp_port
+        ) as surface:
             if sign_on is not None:
                 states = [s for s in profile.states if s.kind is not StateKind.SESSION_EXPIRED]
                 signed_on = ReplayEngine(surface, registry=registry, gate=gate, states=states).run(
@@ -92,7 +118,22 @@ def discover(
                     return _finish(evidence, run_id, "sign_on_failed", "could not sign on", None, None)
             surface.goto(goal.entry_route)
 
-            recorder = Recorder(checker=surface, sensitive_values=set(values.values()))
+            handoff, require_control = None, None
+            if hitl is not None:
+                hitl.registry = registry
+                hitl.open_session(run_id)
+                live = f"CDP endpoint http://127.0.0.1:{cdp_port}" if cdp_port else "the open browser window"
+                handoff = LiveHandoff(
+                    hitl,
+                    session_id=run_id,
+                    run_id=run_id,
+                    surface=surface,
+                    live_session=live,
+                    unclaimed_timeout_s=unclaimed_timeout_s,
+                )
+                require_control = GuardedSurface(surface, hitl, run_id).require_control
+            sensitive = {values[p.name] for p in goal.inputs if p.sensitivity is not Sensitivity.PUBLIC}
+            recorder = Recorder(checker=surface, sensitive_values=sensitive)
             tools = DiscoveryTools(
                 surface=surface,
                 recorder=recorder,
@@ -101,6 +142,9 @@ def discover(
                 policy=policy,
                 profile=profile,
                 registry=registry,
+                handoff=handoff,
+                require_control=require_control,
+                evidence=evidence,
             )
             agent = DiscoveryAgent(model, tools, tool_definitions(goal), max_actions=max_actions)
             outcome = agent.run(goal)
@@ -131,7 +175,7 @@ def discover(
         _save_session(evidence, outcome, recorder, vocabulary)
         if stopped is not None or capability is None:
             status, reason = stopped or ("compile_failed", "no artifact")
-            return _finish(evidence, run_id, status, reason, None, None)
+            return _finish(evidence, run_id, status, reason, None, None, tools.interventions)
 
         # The artifact lives with its evidence; verification replays it from there with no model.
         run_library = CapabilityLibrary(evidence.path("capabilities"))
@@ -153,7 +197,9 @@ def discover(
             evidence_root=evidence.path("verification"),
             headless=headless,
         ).result
-    return _finish(evidence, run_id, "recorded", "artifact compiled", capability, verification)
+    return _finish(
+        evidence, run_id, "recorded", "artifact compiled", capability, verification, tools.interventions
+    )
 
 
 def _save_session(
@@ -210,8 +256,11 @@ def _finish(
     reason: str,
     capability: Capability | None,
     verification: Result | None,
+    interventions: list[InterventionSummary] | None = None,
 ) -> DiscoveryOutcome:
-    result = DiscoveryOutcome(run_id, status, reason, evidence.dir, capability, verification)
+    result = DiscoveryOutcome(
+        run_id, status, reason, evidence.dir, capability, verification, interventions or []
+    )
     evidence.save_json(
         "discovery_result.json",
         {
@@ -219,10 +268,19 @@ def _finish(
             "status": status,
             "reason": reason,
             "verified": result.verified,
+            "verification_scope": result.verification_scope,
+            "interventions": [i.model_dump(mode="json") for i in result.interventions],
             "capability": capability.id if capability else None,
             "content_hash": capability.content_hash() if capability else None,
             "verification": verification.model_dump(mode="json") if verification else None,
         },
     )
-    log.info("discovery.finished", status=status, reason=reason, verified=result.verified)
+    log.info(
+        "discovery.finished",
+        status=status,
+        reason=reason,
+        verified=result.verified,
+        scope=result.verification_scope,
+        interventions=len(result.interventions),
+    )
     return result

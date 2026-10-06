@@ -7,21 +7,31 @@ and its result is the next observation. The model never touches the browser dire
 
 Known interstitials from the app profile are dismissed automatically and are *not* recorded:
 they're runtime states that replay already handles, not part of the flow.
+
+With a human in the loop (`handoff`): `request_human` pauses on the live session and the agent
+continues once the operator hands back, told what they did; an irreversible click is performed only
+if the operator approves it, and the confirmation dialog it raises is recorded as expected.
 """
 
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
 from cua.agent.goal import GoalSpec
 from cua.agent.recorder import ActionKind, RecordedStep, Recorder, RecordingError
 from cua.artifact.params import OutputParseError, parse_output, render
-from cua.artifact.schema import TEMPLATE, Parse, Risk, Step, TextPresent, ValueType
+from cua.artifact.schema import TEMPLATE, DialogExpectation, Parse, Risk, Step, TextPresent, ValueType
 from cua.evidence.log import get_logger
+from cua.evidence.sink import RunEvidence
+from cua.hitl.handoff import LiveHandoff
+from cua.hitl.models import Action, Resolution
 from cua.policy import Policy
 from cua.profile import AppProfile, StateKind
+from cua.replay.redaction import profile_vocabulary
+from cua.replay.result import InterventionSummary
 from cua.security.masking import SecretRegistry, mask_text
 from cua.surface.base import ActionFailed, TargetNotFound
 from cua.surface.snapshot import Element, Snapshot
@@ -157,6 +167,10 @@ class DiscoveryTools:
     finish_text: str | None = None
     finish_frame: str | None = None
     auto_dismissed: list[str] = field(default_factory=list)
+    handoff: LiveHandoff | None = None  # None: request_human ends the run, irreversible clicks are refused
+    require_control: Callable[[], None] | None = None  # raises unless automation holds the session's lease
+    evidence: RunEvidence | None = None
+    interventions: list[InterventionSummary] = field(default_factory=list)
     _snapshot: Snapshot = field(default_factory=Snapshot)
 
     # --- observation ----------------------------------------------------------------------
@@ -164,6 +178,8 @@ class DiscoveryTools:
     def observe(self) -> str:
         """Handle known states, take a fresh snapshot, and render it (masked) for the model."""
         notes = self._handle_known_states()
+        if (covered := self.surface.blocking_overlay()) is not None:
+            notes.append(f"(System: something undeclared is covering the screen in frame {covered!r}.)")
         self._snapshot = self.surface.snapshot()
         rendered = mask_text(self._snapshot.render(), self.registry)
         done = ", ".join(sorted(self.outputs)) or "none"
@@ -215,11 +231,55 @@ class DiscoveryTools:
                 case "finish":
                     return self._finish(args)
                 case "request_human":
-                    return ToolResult("Stopping for a human.", terminal="request_human")
+                    return self._ask_human(args["reason"])
             return ToolResult(f"Unknown tool {name!r}.", is_error=True)
         except (RecordingError, ActionFailed, ValueError) as exc:
             log.warning("agent.action_rejected", tool=name, reason=str(exc))
             return ToolResult(f"Not done: {exc}\n\n{self.observe()}", is_error=True)
+
+    # --- human in the loop ------------------------------------------------------------------
+
+    def _ask_human(self, reason: str) -> ToolResult:
+        if self.handoff is None:
+            return ToolResult("Stopping for a human.", terminal="request_human")
+        resolution = self._escalate("agent_request", intent=reason, reason=reason)
+        if resolution.timed_out or resolution.action is Action.ABORT:
+            return ToolResult(
+                f"Stopping: the operator {'aborted' if resolution.action else 'did not respond'}.",
+                terminal="request_human",
+            )
+        did = "; ".join(a.description for a in resolution.human_actions) or "nothing on screen"
+        note = resolution.note or "no note"
+        return ToolResult(f"A human operator handled it ({note}). They did: {did}.\n\n{self.observe()}")
+
+    def _escalate(self, kind: str, *, intent: str, reason: str) -> Resolution:
+        assert self.handoff is not None
+        step_id = f"action{len(self.recorder.steps) + 1}"
+        screenshot = None
+        if self.evidence is not None:  # what the operator will see, redacted like failure screenshots
+            shot = self.surface.screenshot([], profile_vocabulary(self.profile))
+            screenshot = self.evidence.save_image(f"{self.goal.id}.{step_id}.intervention.png", shot).name
+        resolution = self.handoff.escalate(
+            kind=kind,
+            capability_id=self.goal.id,
+            step_id=step_id,
+            intent=intent,
+            reason=reason,
+            steps=[("next", "continue discovery from the current screen")],
+            screenshot=screenshot,
+            locations=self.surface.observe().locations,
+        )
+        self.interventions.append(
+            InterventionSummary(
+                id=resolution.intervention_id,
+                kind=kind,
+                step_id=step_id,
+                action=resolution.action.value if resolution.action else None,
+                operator=resolution.operator,
+                human_actions=len(resolution.human_actions),
+            )
+        )
+        return resolution
 
     def _element(self, ref: str) -> Element:
         element = self._snapshot.get(ref)
@@ -230,6 +290,8 @@ class DiscoveryTools:
         return element
 
     def _act(self, kind: ActionKind, args: dict[str, Any]) -> str:
+        if self.require_control is not None:
+            self.require_control()
         element = self._element(args["ref"])
         accepted = _ACCEPTS.get(kind)
         if accepted is not None and element.role not in accepted:
@@ -246,20 +308,37 @@ class DiscoveryTools:
 
         if kind == "click":
             step.declared_risk = Risk(args["risk"])
-            probe = step_for_policy(step)
-            if self.policy.needs_approval(probe):
-                raise RecordingError(
-                    "this action is irreversible and needs a human's approval: call request_human"
+            approved = False
+            if self.policy.needs_approval(step_for_policy(step)):
+                if self.handoff is None:
+                    raise RecordingError(
+                        "this action is irreversible and needs a human's approval: call request_human"
+                    )
+                resolution = self._escalate(
+                    "approval",
+                    intent=step.intent,
+                    reason=f"discovery wants to perform an irreversible action: {step.intent}",
                 )
+                if resolution.action is not Action.APPROVE:
+                    raise RecordingError(f"the operator did not approve it ({resolution.note or 'no note'})")
+                approved = True
+                step.declared_risk = Risk.IRREVERSIBLE
             expect = args["expect_text"].strip()
-            already = self._frames_showing(expect) if expect else set()
-            self.surface.click(resolved, None, 10_000)
-            if dialogs := self.surface.take_dialogs():
+            before = self._frames_showing(expect) if expect else set()
+            documents = self.surface.document_ids()
+            # Approved: accept the confirmation this click raises (the operator already said yes) and
+            # record it, so replay expects exactly that dialog. Otherwise any dialog is unexpected.
+            accept_any = DialogExpectation(accept=True, message_contains="") if approved else None
+            self.surface.click(resolved, accept_any, 10_000)
+            dialogs = self.surface.take_dialogs()
+            if unexpected := [d for d in dialogs if not d.expected]:
                 raise RecordingError(
-                    f"an unexpected dialog appeared and was dismissed: {dialogs[0].message!r}"
+                    f"an unexpected dialog appeared and was dismissed: {unexpected[0].message!r}"
                 )
+            if dialogs:
+                step.dialog = DialogExpectation(accept=True, message_contains=dialogs[0].message)
             if expect:
-                appeared, frame = self._wait_for_new_text(expect, already)
+                appeared, frame = self._wait_for_new_text(expect, before, documents)
                 if appeared:
                     step.expect_text, step.expect_frame = expect, frame
                 else:
@@ -324,18 +403,22 @@ class DiscoveryTools:
             if self.surface.check(TextPresent(kind="text_present", text=text, frame=f))
         }
 
-    def _wait_for_new_text(self, text: str, already: set[str | None]) -> tuple[bool, str | None]:
-        """(appeared, frame): the first frame where `text` shows up that didn't show it before the click.
+    def _wait_for_new_text(
+        self, text: str, before: set[str | None], documents: dict[str | None, float]
+    ) -> tuple[bool, str | None]:
+        """(appeared, frame): the first frame showing `text` as *evidence of change*.
 
-        A post-condition must be evidence of change: text that was already visible (e.g. the link
-        that was just clicked) would pass even if the click did nothing. frame None = top document.
+        A post-condition must prove the action did something: text that was already on the very same
+        page (e.g. the link that was just clicked) would pass even if the click did nothing. A frame
+        counts if it shows the text now and either didn't before, or has loaded a new document since
+        (so a heading that replaces a same-named button counts). frame None = top document.
         """
         deadline = time.monotonic() + EXPECT_TIMEOUT_S
         while time.monotonic() < deadline:
+            current = self.surface.document_ids()
             for frame in self._frames():
-                if frame not in already and self.surface.check(
-                    TextPresent(kind="text_present", text=text, frame=frame)
-                ):
+                changed = frame not in before or current.get(frame) != documents.get(frame)
+                if changed and self.surface.check(TextPresent(kind="text_present", text=text, frame=frame)):
                     return True, frame
             self.surface.idle(200)
         return False, None
