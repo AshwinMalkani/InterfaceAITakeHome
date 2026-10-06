@@ -1,0 +1,111 @@
+{
+  "schema_version": "1.0",
+  "id": "cu_core.session.sign_on",
+  "version": "1.0.0",
+  "status": "draft",
+  "description": "Sign on to CU-Core as an operator. Establishes the session other capabilities run in. Credentials come from the caller's credential store at run time and are never persisted.",
+  "app": {
+    "product": "cu_core",
+    "versions": ">=4.2 <5",
+    "surface": "web"
+  },
+  "entry_route": "/login",
+  "inputs": [
+    {
+      "name": "username",
+      "type": "string",
+      "description": "Operator user id",
+      "sensitivity": "pii"
+    },
+    {
+      "name": "password",
+      "type": "string",
+      "description": "Operator password",
+      "sensitivity": "secret"
+    }
+  ],
+  "outputs": [],
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Enter operator user id",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "User ID",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='userid']"
+            }
+          ]
+        },
+        "value": "{{inputs.username}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s2",
+      "intent": "Enter operator password",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Password",
+              "control": "password"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='password']"
+            }
+          ]
+        },
+        "value": "{{inputs.password}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s3",
+      "intent": "Submit sign on",
+      "action": {
+        "kind": "click",
+        "target": {
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Sign On"
+            },
+            {
+              "kind": "css",
+              "selector": "input[type='submit']"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "url_matches",
+        "pattern": "^/core/main$"
+      },
+      "timeout_ms": 10000
+    }
+  ],
+  "success": {
+    "kind": "text_present",
+    "text": "Main Menu",
+    "frame": "menu"
+  },
+  "provenance": {
+    "source": "hand_written",
+    "notes": "Session precondition for all cu_core capabilities."
+  }
+}

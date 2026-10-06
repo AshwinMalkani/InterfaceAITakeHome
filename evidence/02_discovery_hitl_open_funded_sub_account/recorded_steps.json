@@ -1,0 +1,236 @@
+[
+  {
+    "expect_text": "Member Inquiry",
+    "intent": "Open Member Inquiry",
+    "kept": {
+      "frame": "menu",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Member Inquiry",
+          "role": "link"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e3",
+    "rejected": [],
+    "role": "link"
+  },
+  {
+    "expect_text": null,
+    "intent": "Enter member number",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Member Number",
+          "control": "textbox",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "input[name='f1']"
+        }
+      ]
+    },
+    "kind": "fill",
+    "ref": "e9",
+    "rejected": [],
+    "role": "textbox"
+  },
+  {
+    "expect_text": null,
+    "intent": "Run the search",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Search",
+          "role": "button"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e10",
+    "rejected": [],
+    "role": "button"
+  },
+  {
+    "expect_text": "OPEN SUB-ACCOUNT",
+    "intent": "Start opening a sub-account",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Open Sub-Account",
+          "role": "button"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e30",
+    "rejected": [],
+    "role": "button"
+  },
+  {
+    "expect_text": null,
+    "intent": "Choose account type",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Account Type",
+          "control": "select",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "select[name='f2']"
+        }
+      ]
+    },
+    "kind": "select",
+    "ref": "e9",
+    "rejected": [],
+    "role": "select"
+  },
+  {
+    "expect_text": null,
+    "intent": "Enter nickname",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Nickname",
+          "control": "textbox",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "input[name='f3']"
+        }
+      ]
+    },
+    "kind": "fill",
+    "ref": "e11",
+    "rejected": [],
+    "role": "textbox"
+  },
+  {
+    "expect_text": null,
+    "intent": "Enter opening deposit",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Opening Deposit",
+          "control": "textbox",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "input[name='f4']"
+        }
+      ]
+    },
+    "kind": "fill",
+    "ref": "e13",
+    "rejected": [],
+    "role": "textbox"
+  },
+  {
+    "expect_text": null,
+    "intent": "Fund from Share Savings",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "anchor": "Funding Account",
+          "control": "select",
+          "kind": "near_text"
+        },
+        {
+          "kind": "css",
+          "selector": "select[name='f5']"
+        }
+      ]
+    },
+    "kind": "select",
+    "ref": "e15",
+    "rejected": [],
+    "role": "select"
+  },
+  {
+    "expect_text": "Confirm",
+    "intent": "Continue to review",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Continue",
+          "role": "button"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e16",
+    "rejected": [],
+    "role": "button"
+  },
+  {
+    "expect_text": "Confirmation",
+    "intent": "Confirm opening the sub-account",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "role",
+          "name": "Confirm",
+          "role": "button"
+        }
+      ]
+    },
+    "kind": "click",
+    "ref": "e18",
+    "rejected": [],
+    "role": "button"
+  },
+  {
+    "expect_text": null,
+    "intent": "Read confirmation number",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "field_value",
+          "label": "Confirmation Number"
+        }
+      ]
+    },
+    "kind": "extract",
+    "ref": "e9",
+    "rejected": [],
+    "role": "cell"
+  },
+  {
+    "expect_text": null,
+    "intent": "Read new suffix",
+    "kept": {
+      "frame": "main",
+      "strategies": [
+        {
+          "kind": "field_value",
+          "label": "New Suffix"
+        }
+      ]
+    },
+    "kind": "extract",
+    "ref": "e11",
+    "rejected": [],
+    "role": "cell"
+  }
+]

@@ -164,3 +164,26 @@ cases:
     expect:
       result_type: success
       outputs: {member_name: Casey Fakeley, savings_balance: "9295.94"}
+
+  # --- discovered with a human in the loop (M5b): evidence/02_discovery_hitl_open_funded_sub_account ---
+
+  - name: discovered_open_stops_before_confirm
+    description: The discovered irreversible capability replays everything up to Confirm, then waits for approval
+    capability: cu_core.member.open_funded_sub_account
+    params: {member_id: "10002", account_type: Money Market, nickname: Rainy day, opening_deposit: "100.00"}
+    allow_irreversible: true
+    expect:
+      result_type: failure
+      category: approval_required
+      failed_step: s10
+      needs_human: true
+
+  - name: discovered_open_approved
+    description: Approved and allowed, the discovered capability opens the account and accepts the recorded dialog
+    capability: cu_core.member.open_funded_sub_account
+    params: {member_id: "10003", account_type: Holiday Club, nickname: Gifts, opening_deposit: "25.00"}
+    approved: true
+    allow_irreversible: true
+    expect:
+      result_type: success
+      outputs: {confirmation_number: C-004501, new_suffix: "20"}

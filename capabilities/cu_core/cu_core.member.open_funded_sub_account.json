@@ -1,0 +1,351 @@
+{
+  "schema_version": "1.1",
+  "id": "cu_core.member.open_funded_sub_account",
+  "version": "1.0.0",
+  "status": "draft",
+  "description": "Open a new sub-account for a member, funded from their Share Savings account, and return the confirmation number and new suffix. IRREVERSIBLE: moves money and creates an account.\n",
+  "app": {
+    "product": "cu_core",
+    "versions": ">=4.2 <5",
+    "surface": "web"
+  },
+  "entry_route": "/core/main",
+  "inputs": [
+    {
+      "name": "member_id",
+      "type": "string",
+      "description": "5-digit member number",
+      "sensitivity": "pii",
+      "pattern": "\\d{5}"
+    },
+    {
+      "name": "account_type",
+      "type": "string",
+      "description": "Type of sub-account to open",
+      "sensitivity": "public",
+      "choices": [
+        "Share Certificate",
+        "Money Market",
+        "Holiday Club"
+      ]
+    },
+    {
+      "name": "nickname",
+      "type": "string",
+      "description": "Nickname shown on statements",
+      "sensitivity": "public"
+    },
+    {
+      "name": "opening_deposit",
+      "type": "decimal",
+      "description": "Amount moved from share savings",
+      "sensitivity": "pii"
+    }
+  ],
+  "outputs": [
+    {
+      "name": "confirmation_number",
+      "type": "string",
+      "description": "Core system confirmation, e.g. C-004512",
+      "sensitivity": "public"
+    },
+    {
+      "name": "new_suffix",
+      "type": "string",
+      "description": "Suffix of the newly opened sub-account",
+      "sensitivity": "public"
+    }
+  ],
+  "steps": [
+    {
+      "id": "s1",
+      "intent": "Open Member Inquiry",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "menu",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "link",
+              "name": "Member Inquiry"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "Member Inquiry",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s2",
+      "intent": "Enter member number",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Member Number",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f1']"
+            }
+          ]
+        },
+        "value": "{{inputs.member_id}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s3",
+      "intent": "Run the search",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Search"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s4",
+      "intent": "Start opening a sub-account",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Open Sub-Account"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "OPEN SUB-ACCOUNT",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s5",
+      "intent": "Choose account type",
+      "action": {
+        "kind": "select",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Account Type",
+              "control": "select"
+            },
+            {
+              "kind": "css",
+              "selector": "select[name='f2']"
+            }
+          ]
+        },
+        "option": "{{inputs.account_type}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s6",
+      "intent": "Enter nickname",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Nickname",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f3']"
+            }
+          ]
+        },
+        "value": "{{inputs.nickname}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s7",
+      "intent": "Enter opening deposit",
+      "action": {
+        "kind": "fill",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Opening Deposit",
+              "control": "textbox"
+            },
+            {
+              "kind": "css",
+              "selector": "input[name='f4']"
+            }
+          ]
+        },
+        "value": "{{inputs.opening_deposit}}"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s8",
+      "intent": "Fund from Share Savings",
+      "action": {
+        "kind": "select",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "near_text",
+              "anchor": "Funding Account",
+              "control": "select"
+            },
+            {
+              "kind": "css",
+              "selector": "select[name='f5']"
+            }
+          ]
+        },
+        "option": "00 - Share Savings"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s9",
+      "intent": "Continue to review",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Continue"
+            }
+          ]
+        }
+      },
+      "risk": "safe",
+      "expect": {
+        "kind": "text_present",
+        "text": "Confirm",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s10",
+      "intent": "Confirm opening the sub-account",
+      "action": {
+        "kind": "click",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "role",
+              "role": "button",
+              "name": "Confirm"
+            }
+          ]
+        },
+        "dialog": {
+          "accept": true,
+          "message_contains": "Open this sub-account? This action cannot be undone."
+        }
+      },
+      "risk": "irreversible",
+      "expect": {
+        "kind": "text_present",
+        "text": "Confirmation",
+        "frame": "main"
+      },
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s11",
+      "intent": "Read confirmation number",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "field_value",
+              "label": "Confirmation Number"
+            }
+          ]
+        },
+        "output": "confirmation_number",
+        "parse": "text"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    },
+    {
+      "id": "s12",
+      "intent": "Read new suffix",
+      "action": {
+        "kind": "extract",
+        "target": {
+          "frame": "main",
+          "strategies": [
+            {
+              "kind": "field_value",
+              "label": "New Suffix"
+            }
+          ]
+        },
+        "output": "new_suffix",
+        "parse": "text"
+      },
+      "risk": "safe",
+      "timeout_ms": 10000
+    }
+  ],
+  "success": {
+    "kind": "text_present",
+    "text": "SUB-ACCOUNT OPENED",
+    "frame": "main"
+  },
+  "provenance": {
+    "source": "discovery",
+    "recorded_at": "2026-10-06T01:18:05.143857Z",
+    "discovery_run_id": "run_20261006T011653_8bb776",
+    "model": "claude-opus-5-5"
+  }
+}
