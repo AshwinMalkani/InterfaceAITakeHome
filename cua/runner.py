@@ -80,12 +80,18 @@ def replay(
         use_registry(registry),
         run_context(run_id, request_id=request_id, mode="replay"),
     ):
-        log.info("run.started", capability=capability_id, base_url=base_url,
-                 allow_irreversible=allow_irreversible)
+        log.info(
+            "run.started", capability=capability_id, base_url=base_url, allow_irreversible=allow_irreversible
+        )
         result: Result | None = ReplayEngine.preflight(capability, params, gate)
         if result is None:
-            with WebSurface.launch(base_url, headless=headless, slow_mo_ms=slow_mo_ms,
-                                   request_filter=gate.allows_request, cdp_port=cdp_port) as surface:
+            with WebSurface.launch(
+                base_url,
+                headless=headless,
+                slow_mo_ms=slow_mo_ms,
+                request_filter=gate.allows_request,
+                cdp_port=cdp_port,
+            ) as surface:
                 acting: Surface = surface
                 handoff: LiveHandoff | None = None
                 if hitl is not None:
@@ -95,12 +101,22 @@ def replay(
                     live = "the open browser window"
                     if cdp_port:
                         live = f"CDP endpoint http://127.0.0.1:{cdp_port}"
-                    handoff = LiveHandoff(hitl, session_id=run_id, run_id=run_id, surface=surface,
-                                          live_session=live, unclaimed_timeout_s=unclaimed_timeout_s)
+                    handoff = LiveHandoff(
+                        hitl,
+                        session_id=run_id,
+                        run_id=run_id,
+                        surface=surface,
+                        live_session=live,
+                        unclaimed_timeout_s=unclaimed_timeout_s,
+                    )
                 # Signing on can't itself recover from "session expired", so that state is excluded.
                 sign_on_engine = ReplayEngine(
-                    surface, registry=registry, evidence=evidence, gate=gate,
-                    ui_vocabulary=ui_vocabulary, redact_screenshots=redact,
+                    surface,
+                    registry=registry,
+                    evidence=evidence,
+                    gate=gate,
+                    ui_vocabulary=ui_vocabulary,
+                    redact_screenshots=redact,
                     states=[s for s in profile.states if s.kind is not StateKind.SESSION_EXPIRED],
                 )
 
@@ -112,10 +128,17 @@ def replay(
                     if signed_on.type != "success":
                         result = signed_on
                 if result is None:
-                    engine = ReplayEngine(acting, registry=registry, evidence=evidence, gate=gate,
-                                          states=profile.states, reauthenticate=reauthenticate,
-                                          escalation=handoff, ui_vocabulary=ui_vocabulary,
-                                          redact_screenshots=redact)
+                    engine = ReplayEngine(
+                        acting,
+                        registry=registry,
+                        evidence=evidence,
+                        gate=gate,
+                        states=profile.states,
+                        reauthenticate=reauthenticate,
+                        escalation=handoff,
+                        ui_vocabulary=ui_vocabulary,
+                        redact_screenshots=redact,
+                    )
                     result = engine.run(capability, params)
         evidence.save_json("result.json", result.model_dump(mode="json"))
         log.info("run.finished", result=result.type)

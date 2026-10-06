@@ -164,8 +164,13 @@ class ApprovalLedger:
         return entry is not None and entry.content_hash == capability.content_hash()
 
     def approve(self, capability: Capability, approved_by: str, note: str = "") -> Approval:
-        entry = Approval(version=capability.version, content_hash=capability.content_hash(),
-                         approved_by=approved_by, approved_at=datetime.now(UTC), note=note)
+        entry = Approval(
+            version=capability.version,
+            content_hash=capability.content_hash(),
+            approved_by=approved_by,
+            approved_at=datetime.now(UTC),
+            note=note,
+        )
         self.entries[capability.id] = entry
         sink.write_json(self.path, {k: v.model_dump(mode="json") for k, v in sorted(self.entries.items())})
         return entry
@@ -201,8 +206,11 @@ class PolicyGate:
         for step in capability.steps:
             if step.action.kind not in self.policy.allowed_actions:
                 problems.append(f"step {step.id}: action {step.action.kind!r} is not allowed")
-            if (route := getattr(step.action, "route", None)) and "{{" not in route \
-                    and not self.policy.route_allowed(route):
+            if (
+                (route := getattr(step.action, "route", None))
+                and "{{" not in route
+                and not self.policy.route_allowed(route)
+            ):
                 problems.append(f"step {step.id}: route {route!r} is not allowed")
             if self.policy.classify(step) is Risk.IRREVERSIBLE and step.risk is not Risk.IRREVERSIBLE:
                 problems.append(f"step {step.id}: looks irreversible but is declared {step.risk.value!r}")
